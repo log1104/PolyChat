@@ -1,0 +1,27 @@
+{
+  "name": "polychat",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "PolyChat Mentor System monorepo",
+  "scripts": {
+    "dev": "pnpm run -r --parallel dev --filter @polychat/api --filter @polychat/web",
+    "dev:web": "pnpm --filter @polychat/web dev",
+    "dev:api": "pnpm --filter @polychat/api dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "format": "pnpm -r format"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "devDependencies": {
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-vue": "^9.26.0",
+    "typescript-eslint": "^8.14.0",
+    "vue-eslint-parser": "^9.4.3"
+  }
+}

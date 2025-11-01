@@ -1,0 +1,20 @@
+# dependencies
+node_modules/
+pnpm-lock.yaml
+
+# environment files
+.env*
+apps/*/.env*
+
+# build outputs
+dist/
+.turbo/
+.vercel/
+
+# logs
+*.log
+firebase-debug.log
+
+# system files
+.DS_Store
+Thumbs.db

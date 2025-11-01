@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light dark;
+  background-color: #0b0f19;
+}
+
+body {
+  @apply bg-slate-950 text-slate-50 font-sans;
+}
+
+#app {
+  @apply min-h-screen;
+}

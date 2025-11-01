@@ -1,0 +1,26 @@
+{
+  "name": "@polychat/tooling",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "test": "vitest",
+    "format": "prettier --check src"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.11",
+    "eslint": "^9.12.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.3.3",
+    "typescript": "~5.9.3",
+    "vitest": "^2.1.5"
+  }
+}

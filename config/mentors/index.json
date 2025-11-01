@@ -1,0 +1,24 @@
+{
+  "mentors": [
+    {
+      "id": "general",
+      "promptFile": "./general.json",
+      "keywords": ["general", "default", "chat"]
+    },
+    {
+      "id": "bible",
+      "promptFile": "./bible.json",
+      "keywords": ["verse", "scripture", "bible"]
+    },
+    {
+      "id": "chess",
+      "promptFile": "./chess.json",
+      "keywords": ["chess", "fen", "board", "move"]
+    },
+    {
+      "id": "stock",
+      "promptFile": "./stock.json",
+      "keywords": ["stock", "ticker", "finance", "indicator"]
+    }
+  ]
+}
