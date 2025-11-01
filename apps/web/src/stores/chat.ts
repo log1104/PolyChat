@@ -45,6 +45,7 @@ const defaultBaseUrl =
   import.meta.env.DEV ? 'http://127.0.0.1:54321/functions/v1' : '';
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? defaultBaseUrl).replace(/\/$/, '');
 const chatEndpoint = apiBaseUrl ? `${apiBaseUrl}/chat` : '/chat';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
 const SESSION_STORAGE_KEY = 'polychat.sessionId';
 const USER_STORAGE_KEY = 'polychat.userId';
 
@@ -82,7 +83,15 @@ export const useChatStore = defineStore('chat', {
       try {
         const response = await fetch(chatEndpoint, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(supabaseAnonKey
+              ? {
+                  apikey: supabaseAnonKey,
+                  Authorization: `Bearer ${supabaseAnonKey}`
+                }
+              : {})
+          },
           body: JSON.stringify({
             message: content,
             mentorId: this.activeMentor,
@@ -127,7 +136,14 @@ export const useChatStore = defineStore('chat', {
           params.set('userId', this.userId);
         }
 
-        const response = await fetch(`${chatEndpoint}?${params.toString()}`);
+        const response = await fetch(`${chatEndpoint}?${params.toString()}`, {
+          headers: supabaseAnonKey
+            ? {
+                apikey: supabaseAnonKey,
+                Authorization: `Bearer ${supabaseAnonKey}`
+              }
+            : undefined
+        });
 
         if (!response.ok) {
           throw new Error('Unable to load previous session. Starting a new chat.');

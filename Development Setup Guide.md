@@ -78,6 +78,7 @@ FINANCE_API_KEY=
 BIBLE_EMBED_MODEL=text-embedding-3-large
 PORT=3000
 VITE_API_BASE_URL=http://127.0.0.1:54321/functions/v1
+VITE_SUPABASE_ANON_KEY=
 ```
 
 Never commit `.env*` files. In Vercel, configure the same variables (with production values) via Project Settings or the Supabase integration.
@@ -160,3 +161,5 @@ Runs frontend + Express gateway in parallel (Supabase function still recommended
 - Update `.env.example` whenever new env vars are introduced
 - Document new scripts/services as slices add capabilities (AgentKit, uploads, analytics)
 - Align this guide with `Schema and Tool Specs.md` after schema/tooling changes
+
+
