@@ -339,6 +339,7 @@ API Gateway exposes this via `POST /api/tools/bible/search` with payload `{ "que
 - [ ] Seed mentor registry and confirm planner configs align.
 - [ ] Populate prompt templates under `config/mentors`.
 - [ ] Configure environment variables and secrets in Vercel/Supabase.
+- [ ] Deploy the `chat` Supabase Edge Function (`supabase functions deploy chat --env-file .env`) and set `VITE_API_BASE_URL` to the functions host.
 - [ ] Deploy Stockfish and finance services or configure external providers.
 - [ ] Ingest Bible embeddings before Slice 4 release.
 - [ ] Document any provider specific rate limits in the runbook.
