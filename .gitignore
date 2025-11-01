@@ -6,7 +6,7 @@ node_modules/
 apps/*/.env*
 
 # build outputs
-dist/
+
 .turbo/
 .vercel/
 
