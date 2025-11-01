@@ -1,77 +1,70 @@
-# Development Setup Guide
+﻿# Development Setup Guide
 
 ## 1. Overview
 
-This guide describes how to get a local development environment running for the Mentor System project. Follow the steps sequentially to ensure dependencies, environment variables, and supporting services are configured before you start implementing vertical slices.
+Use this guide to bootstrap a local environment for the Mentor System. The steps walk through prerequisites, repository layout, environment variables, Supabase setup, and daily developer workflows.
 
 ## 2. Prerequisites
 
-- **Node.js** ≥ 20.x (install via `fnm`, `nvm`, or official installer).
-- **pnpm** ≥ 9.x (`corepack enable` enables pnpm on Node 20+).
-- **Git** ≥ 2.40.
-- **Supabase CLI** ≥ 1.150 (`npm install -g supabase` or standalone binary).
-- **Docker Desktop** (required for local Supabase services).
-- **Python 3.10+** (for optional scripting utilities).
-
-> If your team prefers npm or yarn, update the package manager reference in this document and the root `packageManager` field accordingly.
+- **Node.js** ≥ 20.x (via `fnm`, `nvm`, or the official installer)
+- **pnpm** ≥ 10.x (`corepack enable` or install from https://pnpm.io/installation)
+- **Git** ≥ 2.40
+- **Supabase CLI** ≥ 1.150 (install with Scoop or download binary)
+- **Docker Desktop** (local Supabase services)
+- **Python 3.10+** (utility scripts)
 
 ## 3. Repository Structure
-
-The baseline monorepo layout (created in Slice 1) is as follows:
 
 ```
 PolyChat/
 ├─ apps/
-│  ├─ web/               # Vue 3 chat frontend (Vite)
-│  └─ api/               # Node/Express API or Vercel functions
+│  ├─ web/           # Vue 3 chat frontend (Vite)
+│  └─ api/           # Optional Express gateway (local use only)
 ├─ packages/
-│  ├─ mentors/           # Shared mentor definitions and prompts
-│  └─ tooling/           # SDKs/clients for external services
-├─ config/
-│  └─ mentors/           # JSON templates for mentor prompts
-├─ scripts/              # CLI utilities (ingestion, seeding)
+│  ├─ mentors/       # Shared mentor definitions and prompt loaders
+│  └─ tooling/       # Tool client helpers (Stockfish, finance APIs, etc.)
+├─ config/mentors/   # JSON prompt templates
+├─ design/           # UI tokens and assets
+├─ scripts/          # CLI utilities (embedding, seeding)
 ├─ supabase/
-│  ├─ migrations/        # SQL migration files
-│  ├─ seeds/             # Seed data scripts
-│  └─ init/              # Local dev config (optional)
-├─ docs/                 # Documentation (move Markdown docs here)
-├─ .env.example          # Template with required environment variables
-├─ turbo.json / nx.json  # (optional) build orchestrator config
-├─ package.json          # Root scripts and workspace settings
-└─ pnpm-workspace.yaml   # Workspace package definitions
+│  ├─ migrations/    # SQL schema migrations
+│  ├─ seeds/         # Seed scripts (e.g., mentor registry)
+│  └─ functions/     # Supabase Edge Functions (chat API)
+├─ docs/             # Markdown documentation hub
+├─ .env.example      # Root environment template
+├─ package.json      # Workspace scripts and metadata
+├─ pnpm-workspace.yaml
+└─ vercel.json
 ```
 
-> Adjust paths if you split the repo differently. Keep documentation in `docs/` for discoverability.
+## 4. Package Manager & Scripts
 
-## 4. Package Manager and Scripts
+- `package.json` declares `"packageManager": "pnpm@10.x"`
+- Workspaces defined for `apps/*`, `packages/*`, `scripts`
 
-- Ensure `package.json` declares `"packageManager": "pnpm@9.x"` and `pnpm-workspace.yaml` includes `apps/*` and `packages/*`.
-- Common root scripts in `package.json`:
+Useful root scripts:
 
 ```json
 {
   "scripts": {
-    "dev:web": "pnpm --filter web dev",
-    "dev:api": "pnpm --filter api dev",
-    "dev": "pnpm run dev:api & pnpm run dev:web",
+    "dev": "pnpm run -r --parallel dev --filter @polychat/api --filter @polychat/web",
+    "dev:web": "pnpm --filter @polychat/web dev",
+    "dev:api": "pnpm --filter @polychat/api dev",
+    "build": "pnpm -r build",
     "lint": "pnpm -r lint",
-    "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "format": "pnpm -r format"
+    "test": "pnpm -r test"
   }
 }
 ```
 
-Run `pnpm install` at the root after cloning to bootstrap dependencies.  
-If pnpm is not globally available and `corepack enable` is blocked, use `npx pnpm <command>` (e.g., `npx pnpm install`, `npx pnpm --filter @polychat/web dev`).
+Run `pnpm install` at the root after cloning. If pnpm is not globally available, use `npx pnpm <command>`.
 
 ## 5. Environment Variables
 
-1. Copy `.env.example` to `.env` at the repo root.
-2. Add service-specific files:
-   - `apps/web/.env.local`
-   - `apps/api/.env.local`
-3. Required keys (see `Schema and Tool Specs.md` for full descriptions):
+1. Copy `.env.example` → `.env`
+2. Create per-app files if needed (`apps/web/.env.local`, etc.)
+3. Populate the following keys:
 
 ```
 OPENROUTER_API_KEY=
@@ -80,122 +73,90 @@ SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 STOCKFISH_API_URL=http://localhost:8787
 STOCKFISH_API_KEY=local-dev
-FINANCE_API_BASE=https://sandbox.finance.local
+FINANCE_API_BASE=http://localhost:8899
 FINANCE_API_KEY=
 BIBLE_EMBED_MODEL=text-embedding-3-large
 PORT=3000
+VITE_API_BASE_URL=http://127.0.0.1:54321/functions/v1
 ```
 
-> Never commit `.env*` files. Configure corresponding secrets in Vercel/Supabase for non-local environments.
+Never commit `.env*` files. In Vercel, configure the same variables (with production values) via Project Settings or the Supabase integration.
 
 ## 6. Local Supabase Setup
 
-1. Install and start Docker Desktop.
-2. From the project root, initialize Supabase if not already linked:
+1. Initialise (first run only):
    ```bash
    supabase init
    ```
-3. Start the local stack:
+2. Start services:
    ```bash
    supabase start
    ```
-   This runs Postgres, API, auth, and storage at `http://localhost:54321`.
-4. Apply migrations and seeds:
+3. Apply migrations and seed mentors:
    ```bash
-   supabase db reset --linked --seed
+   supabase db reset
+   supabase db execute --file supabase/seeds/mentors.sql
    ```
-   - Alternatively run `supabase db push` followed by `supabase db execute --file supabase/seeds/mentors.sql`.
-5. Access the Studio UI at `http://localhost:54323` to inspect tables and verify data.
+4. Studio UI accessible at `http://localhost:54323`
+5. Stop services when done: `supabase stop`
 
-When finished, stop services with `supabase stop`.
+## 7. Local Tool Services
 
-## 7. Local Tooling Services
+### 7.1 Stockfish
+- Local server: `pnpm --filter @polychat/tooling run stockfish:dev`
+- Docker: `docker run -p 8787:8080 ghcr.io/your-org/stockfish-service:latest`
 
-### 7.1 Stockfish Microservice
+### 7.2 Finance Mock
+- `pnpm --filter @polychat/tooling run finance:mock`
 
-You can either:
+### 7.3 Bible Embed Pipeline
+- `pnpm --filter scripts run embed:bible`
 
-- Run the lightweight local server (recommended):
-  ```bash
-  pnpm --filter tooling run stockfish:dev
-  ```
-  Expected to start on `http://localhost:8787`.
+## 8. Running the Apps
 
-- Or spin up Docker:
-  ```bash
-  docker run -p 8787:8080 ghcr.io/your-org/stockfish-service:latest
-  ```
-
-Ensure `STOCKFISH_API_URL` points to the correct port.
-
-### 7.2 Finance Indicator Service
-
-For local development, mock the finance service:
-
+### 8.1 Frontend
 ```bash
-pnpm --filter tooling run finance:mock
+pnpm --filter @polychat/web dev
 ```
+Launches Vite on `http://localhost:5173`.
 
-This offers deterministic responses at `http://localhost:8899`. Update `FINANCE_API_BASE` accordingly. Use real API keys only in staging/production.
-
-### 7.3 Bible Embedding Tooling
-
-Run the ingestion script once you have an OpenRouter key:
-
+### 8.2 Supabase Edge Function (chat API)
 ```bash
-pnpm --filter scripts run embed:bible
+supabase functions serve chat --env-file .env
 ```
+Serves the chat endpoint at `http://127.0.0.1:54321/functions/v1/chat`.
 
-This script:
-1. Loads verse CSV from `data/bible/web.csv`.
-2. Calls the embed model defined in `BIBLE_EMBED_MODEL`.
-3. Inserts rows into `public.vector_verses`.
-
-## 8. Running the Applications
-
-### 8.1 Web Frontend
-
+### 8.3 Optional Express Gateway
 ```bash
-pnpm --filter web dev
+pnpm --filter @polychat/api dev
 ```
-Launches Vite dev server at `http://localhost:5173`.
+Useful for legacy tests; the frontend now defaults to Supabase functions.
 
-### 8.2 API Gateway
-
-```bash
-pnpm --filter api dev
-```
-Starts the Express server on `http://localhost:3000`. The server expects Supabase and tool service env vars to be set.
-
-### 8.3 Combined Dev Workflow
-
+### 8.4 Combined Workflow
 ```bash
 pnpm dev
 ```
-Runs both servers concurrently (ensure your shell supports background processes).
+Runs frontend + Express gateway in parallel (Supabase function still recommended for API testing).
 
 ## 9. Quality Gates
 
-- **Linting**: `pnpm lint`
-- **Unit tests**: `pnpm test`
-- **Type checking**: `pnpm typecheck`
-- **E2E tests** (after Slice 2): `pnpm --filter web test:e2e`
-- **Database diff**: `supabase db diff --linked`
-
-Integrate these commands into CI as described in `# Mentor System — Testing Strategy.md`.
+- Lint: `pnpm lint`
+- Type check: `pnpm typecheck`
+- Unit tests: `pnpm test`
+- E2E (Slice 2+): `pnpm --filter @polychat/web test:e2e`
+- DB diff: `supabase db diff`
 
 ## 10. Troubleshooting
 
-| Issue | Fix |
-|-------|-----|
-| Supabase containers won’t start | Restart Docker, run `supabase stop` then `supabase start --debug` |
-| Stockfish service timeout | Confirm service URL, reduce depth, or restart the container |
-| Missing mentor prompts | Run `pnpm --filter mentors build` to regenerate compiled JSON |
-| CORS errors | Verify `.env` origin settings (`VITE_PUBLIC_API_URL`, etc.) |
-| pnpm command not found | Execute `corepack enable` or `npm install -g pnpm` |
+| Issue | Remedy |
+|-------|--------|
+| Supabase containers fail to start | Restart Docker, run `supabase stop`, then `supabase start --debug` |
+| Chat API CORS errors | Ensure `VITE_API_BASE_URL` matches the running function host |
+| No mentor prompts | `pnpm --filter @polychat/mentors build` |
+| pnpm missing | `corepack enable` or `npm install -g pnpm` |
 
-## 11. Next Steps
+## 11. Keep It Current
 
-- Keep `.env.example` updated as new variables are introduced.
-- Document new scripts or services inside this guide when future slices add capabilities (AgentKit, uploads, analytics).
-- Align this guide with `Schema and Tool Specs.md` whenever migrations or data pipelines change.
+- Update `.env.example` whenever new env vars are introduced
+- Document new scripts/services as slices add capabilities (AgentKit, uploads, analytics)
+- Align this guide with `Schema and Tool Specs.md` after schema/tooling changes

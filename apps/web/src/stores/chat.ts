@@ -41,7 +41,10 @@ interface ConversationResponse {
   history: ChatHistoryRow[];
 }
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
+const defaultBaseUrl =
+  import.meta.env.DEV ? 'http://127.0.0.1:54321/functions/v1' : '';
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? defaultBaseUrl).replace(/\/$/, '');
+const chatEndpoint = apiBaseUrl ? `${apiBaseUrl}/chat` : '/chat';
 const SESSION_STORAGE_KEY = 'polychat.sessionId';
 const USER_STORAGE_KEY = 'polychat.userId';
 
@@ -77,7 +80,7 @@ export const useChatStore = defineStore('chat', {
       this.isSending = true;
 
       try {
-        const response = await fetch(`${apiBaseUrl}/api/chat`, {
+        const response = await fetch(chatEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -124,7 +127,7 @@ export const useChatStore = defineStore('chat', {
           params.set('userId', this.userId);
         }
 
-        const response = await fetch(`${apiBaseUrl}/api/chat?${params.toString()}`);
+        const response = await fetch(`${chatEndpoint}?${params.toString()}`);
 
         if (!response.ok) {
           throw new Error('Unable to load previous session. Starting a new chat.');
