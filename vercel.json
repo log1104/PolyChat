@@ -1,5 +1,5 @@
 {
-  "buildCommand": "pnpm -r build && cp -R apps/web/dist dist",
+  "buildCommand": "pnpm -r build && rm -rf dist && mkdir -p dist && cp -R apps/web/dist/. dist",
   "installCommand": "pnpm install",
   "outputDirectory": "dist"
 }
