@@ -39,13 +39,13 @@ const error = computed(() => chatStore.error);
 const isDrawerOpen = ref(false);
 const activePanel = ref<"history" | "mentors" | "settings">("history");
 
-const toggleMentorDrawer = () => {
-  if (isDrawerOpen.value && activePanel.value === "mentors") {
+const toggleHistoryDrawer = () => {
+  // Burger toggles the History panel. If History is already open, close it.
+  if (isDrawerOpen.value && activePanel.value === "history") {
     isDrawerOpen.value = false;
     return;
   }
-
-  activePanel.value = "mentors";
+  activePanel.value = "history";
   isDrawerOpen.value = true;
 };
 
@@ -88,15 +88,15 @@ onMounted(() => {
       <div class="flex h-full flex-col items-center py-4">
         <button
           type="button"
-          aria-label="Toggle menu"
-          title="Toggle menu"
-          :aria-pressed="isDrawerOpen && activePanel === 'mentors'"
+          aria-label="Toggle history"
+          title="Toggle history"
+          :aria-pressed="isDrawerOpen && activePanel === 'history'"
           class="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-700 bg-slate-900 text-slate-50 shadow-sm transition hover:border-slate-500 hover:bg-slate-800"
           :class="{
             'border-slate-400 bg-slate-800 text-white':
-              isDrawerOpen && activePanel === 'mentors',
+              isDrawerOpen && activePanel === 'history',
           }"
-          @click="toggleMentorDrawer"
+          @click="toggleHistoryDrawer"
         >
           <span aria-hidden="true" class="text-2xl leading-none">☰</span>
         </button>
@@ -222,14 +222,22 @@ onMounted(() => {
       @click="isDrawerOpen = false"
     />
 
-    <!-- Side drawer aligned to the right of the rail -->
-    <aside
-      v-if="isDrawerOpen"
-      class="fixed inset-y-0 left-16 z-50 w-80 max-w-[90vw] border-r border-slate-800/80 bg-slate-900/80 shadow-card backdrop-blur"
-      role="dialog"
-      aria-label="Side panel"
+    <!-- Side drawer aligned to the right of the rail, slides in/out -->
+    <transition
+      enter-active-class="transform transition duration-200 ease-out"
+      enter-from-class="-translate-x-full opacity-0"
+      enter-to-class="translate-x-0 opacity-100"
+      leave-active-class="transform transition duration-150 ease-in"
+      leave-from-class="translate-x-0 opacity-100"
+      leave-to-class="-translate-x-full opacity-0"
     >
-      <div class="relative flex h-full flex-col p-6">
+      <aside
+        v-if="isDrawerOpen"
+        class="fixed inset-y-0 left-16 z-50 w-80 max-w-[90vw] transform border-r border-slate-800/80 bg-slate-900/80 shadow-card backdrop-blur"
+        role="dialog"
+        aria-label="Side panel"
+      >
+        <div class="relative flex h-full flex-col p-6">
         <div class="mb-4 flex items-center justify-between pr-12">
           <div>
             <h2 class="text-lg font-semibold text-slate-100">
@@ -266,6 +274,10 @@ onMounted(() => {
               >
                 New chat
               </button>
+            </div>
+
+            <div class="mt-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              Recent
             </div>
 
             <div v-if="chatStore.conversationsLoading" class="space-y-2 text-xs text-slate-400">
@@ -342,7 +354,8 @@ onMounted(() => {
             </div>
           </div>
         </div>
-      </div>
-    </aside>
+        </div>
+      </aside>
+    </transition>
   </main>
 </template>
