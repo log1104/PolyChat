@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia';
+﻿import { defineStore } from 'pinia';
 
 export type ChatRole = 'user' | 'assistant' | 'system';
 
@@ -41,8 +41,7 @@ interface ConversationResponse {
   history: ChatHistoryRow[];
 }
 
-const defaultBaseUrl =
-  import.meta.env.DEV ? 'http://127.0.0.1:54321/functions/v1' : '';
+const defaultBaseUrl = import.meta.env.DEV ? 'http://127.0.0.1:54321/functions/v1' : '';
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? defaultBaseUrl).replace(/\/$/, '');
 const chatEndpoint = apiBaseUrl ? `${apiBaseUrl}/chat` : '/chat';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
@@ -59,7 +58,8 @@ export const useChatStore = defineStore('chat', {
     error: null
   }),
   getters: {
-    orderedMessages: (state) => [...state.messages].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
+    orderedMessages: (state) =>
+      [...state.messages].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
   },
   actions: {
     async sendMessage(content: string) {
