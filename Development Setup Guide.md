@@ -163,3 +163,22 @@ Runs frontend + Express gateway in parallel (Supabase function still recommended
 - Align this guide with `Schema and Tool Specs.md` after schema/tooling changes
 
 
+## 12. Common Pitfalls & Lessons Learned
+
+- Docker must be running. `supabase start` launches Docker containers; without Docker Desktop, nothing comes up and functions fail.
+- Supabase CLI on PATH. If installed via Scoop, use `Set-Alias supabase "$env:USERPROFILE\scoop\apps\supabase\current\supabase.exe"` or add that path to your user PATH; admin shells may not inherit it.
+- `config.toml` formatting. Use valid TOML (no BOM). After `supabase init`, keep:
+  
+  ```toml
+  [functions]
+  directory = "./functions"
+  ```
+  
+  Earlier ad‑hoc formats or BOM markers caused parse errors.
+- Use canonical env names. Edge Functions read `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` exactly. Don’t prefix with `LOCAL_`.
+- Vite envs are compile‑time. Frontend reads only `VITE_*` during build/dev. Put `VITE_API_BASE_URL` and `VITE_SUPABASE_ANON_KEY` in `apps/web/.env.local` (and restart Vite after changes).
+- Edge auth headers. Calling a Supabase function requires `Authorization: Bearer <anon key>` and `apikey: <anon key>`. Opening the function URL directly in the browser will show “Missing authorization header”. Test with the app or curl.
+- Windows line endings / BOM. Creating TOML/JSON with BOM or mixing CRLF/LF can break parsers; save as UTF‑8 without BOM when possible.
+- Vercel static output. Either set project Output Directory to `apps/web/dist` or copy to root `dist/` in `vercel.json`. Commit `pnpm-lock.yaml` so Vercel uses pnpm reliably.
+- ESLint v9 flat config. Use `eslint.config.js` (flat) instead of legacy `.eslintrc.*`; align TypeScript parser options or lint will fail.
+- Env reload. After editing `.env` used by `supabase functions serve --env-file .env`, stop and restart the function to pick up changes.
