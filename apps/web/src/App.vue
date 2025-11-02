@@ -70,6 +70,11 @@ const resetChat = () => {
 
 onMounted(() => {
   chatStore.initializeFromStorage();
+  // Load conversation list after initialization completes
+  // If userId becomes available later, the store will load conversations itself
+  if (chatStore.userId) {
+    chatStore.loadConversations().catch(() => {});
+  }
 });
 </script>
 
@@ -251,12 +256,51 @@ onMounted(() => {
 
         <!-- Panel content -->
         <div class="min-h-0 flex-1 overflow-y-auto pr-1">
-          <!-- History placeholder -->
-          <div
-            v-if="activePanel === 'history'"
-            class="space-y-2 text-sm text-slate-400"
-          >
-            <p>No history yet. Your conversations will appear here.</p>
+          <!-- History List -->
+          <div v-if="activePanel === 'history'" class="space-y-3">
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                class="inline-flex items-center gap-2 rounded-xl border border-slate-800/60 bg-slate-900/70 px-3 py-2 text-xs text-slate-200 transition hover:border-slate-700 hover:bg-slate-800"
+                @click="chatStore.startNewConversation()"
+              >
+                New chat
+              </button>
+            </div>
+
+            <div v-if="chatStore.conversationsLoading" class="space-y-2 text-xs text-slate-400">
+              <p>Loading conversations…</p>
+            </div>
+
+            <ul v-else class="space-y-2">
+              <li
+                v-for="conv in chatStore.conversations"
+                :key="conv.id"
+              >
+                <button
+                  type="button"
+                  class="w-full rounded-xl border border-slate-800/60 bg-slate-900/60 p-3 text-left transition hover:border-slate-700 hover:bg-slate-800"
+                  :class="{ 'border-slate-600 bg-slate-800': conv.id === chatStore.sessionId }"
+                  @click="chatStore.selectConversation(conv.id); isDrawerOpen = false;"
+                >
+                  <div class="flex items-center justify-between">
+                    <div class="truncate">
+                      <div class="truncate text-sm font-medium text-slate-100">
+                        {{ conv.title || 'New chat' }}
+                      </div>
+                      <div class="truncate text-xs text-slate-400">
+                        {{ new Date(conv.createdAt).toLocaleString() }} · {{ conv.mentorId }}
+                      </div>
+                    </div>
+                    <MentorBadge :mentor-id="conv.mentorId" :title="''" />
+                  </div>
+                </button>
+              </li>
+            </ul>
+
+            <div v-if="!chatStore.conversationsLoading && chatStore.conversations.length === 0" class="text-xs text-slate-400">
+              <p>No history yet. Your conversations will appear here.</p>
+            </div>
           </div>
 
           <!-- Mentors: reuse selector -->

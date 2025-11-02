@@ -2,7 +2,14 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import express, { type Request, type Response } from 'express';
 import { z } from 'zod';
-import { getConversation, handleChat } from './services/chatService';
+import {
+  createConversation,
+  getConversation,
+  getConversationMessages,
+  handleChat,
+  listConversations,
+  renameConversation
+} from './services/chatService';
 
 dotenv.config();
 
@@ -21,6 +28,29 @@ const chatRequestSchema = z.object({
 const chatQuerySchema = z.object({
   conversationId: z.string(),
   userId: z.string().optional()
+});
+
+const listConversationsSchema = z.object({
+  userId: z.string(),
+  q: z.string().optional(),
+  limit: z.coerce.number().min(1).max(200).optional(),
+  offset: z.coerce.number().min(0).optional()
+});
+
+const createConversationSchema = z.object({
+  userId: z.string(),
+  mentorId: z.string().optional()
+});
+
+const renameConversationSchema = z.object({
+  userId: z.string(),
+  title: z.string().min(1).max(200)
+});
+
+const messagesQuerySchema = z.object({
+  userId: z.string().optional(),
+  limit: z.coerce.number().min(1).max(200).optional(),
+  before: z.string().datetime().optional()
 });
 
 app.get('/health', (_req: Request, res: Response) => {
@@ -70,6 +100,78 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       error: true,
       message
     });
+  }
+});
+
+// Conversations listing
+app.get('/api/conversations', async (req: Request, res: Response) => {
+  const parsed = listConversationsSchema.safeParse(req.query);
+  if (!parsed.success) {
+    return res.status(400).json({ error: true, message: 'Invalid query parameters', details: parsed.error.flatten() });
+  }
+  try {
+    const list = await listConversations(
+      parsed.data.userId,
+      parsed.data.q,
+      parsed.data.limit ?? 50,
+      parsed.data.offset ?? 0
+    );
+    res.json({ conversations: list });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: true, message });
+  }
+});
+
+// Create a new conversation
+app.post('/api/conversations', async (req: Request, res: Response) => {
+  const parsed = createConversationSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: true, message: 'Invalid request payload', details: parsed.error.flatten() });
+  }
+  try {
+    const conv = await createConversation(parsed.data.userId, parsed.data.mentorId);
+    res.status(201).json(conv);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: true, message });
+  }
+});
+
+// Rename a conversation
+app.patch('/api/conversations/:id', async (req: Request, res: Response) => {
+  const body = renameConversationSchema.safeParse(req.body);
+  const id = z.string().uuid().safeParse(req.params.id);
+  if (!body.success || !id.success) {
+    return res.status(400).json({ error: true, message: 'Invalid request', details: { body: body.success ? undefined : body.error.flatten() } });
+  }
+  try {
+    const result = await renameConversation(id.data, body.data.userId, body.data.title);
+    res.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: true, message });
+  }
+});
+
+// Get paginated messages for a conversation
+app.get('/api/conversations/:id/messages', async (req: Request, res: Response) => {
+  const id = z.string().uuid().safeParse(req.params.id);
+  const parsed = messagesQuerySchema.safeParse(req.query);
+  if (!id.success || !parsed.success) {
+    return res.status(400).json({ error: true, message: 'Invalid request', details: { params: id.success ? undefined : id.error.flatten() } });
+  }
+  try {
+    const items = await getConversationMessages(
+      id.data,
+      parsed.data.userId,
+      parsed.data.limit ?? 50,
+      parsed.data.before
+    );
+    res.json({ messages: items });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: true, message });
   }
 });
 

@@ -10,6 +10,14 @@ export interface ChatMessage {
   mentor: string;
 }
 
+export interface ConversationSummary {
+  id: string;
+  userId: string;
+  mentorId: string;
+  title: string | null;
+  createdAt: string;
+}
+
 interface ChatState {
   messages: ChatMessage[];
   activeMentor: string;
@@ -17,6 +25,8 @@ interface ChatState {
   sessionId: string | null;
   userId: string | null;
   error: string | null;
+  conversations: ConversationSummary[];
+  conversationsLoading: boolean;
 }
 
 interface ChatHistoryRow {
@@ -41,6 +51,10 @@ interface ConversationResponse {
   history: ChatHistoryRow[];
 }
 
+interface ListConversationsResponse {
+  conversations: ConversationSummary[];
+}
+
 const defaultBaseUrl = import.meta.env.DEV
   ? "http://127.0.0.1:54321/functions/v1"
   : "";
@@ -48,6 +62,7 @@ const apiBaseUrl = (
   import.meta.env.VITE_API_BASE_URL ?? defaultBaseUrl
 ).replace(/\/$/, "");
 const chatEndpoint = apiBaseUrl ? `${apiBaseUrl}/chat` : "/chat";
+const conversationsEndpoint = apiBaseUrl ? `${apiBaseUrl}/conversations` : "/conversations";
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
 const SESSION_STORAGE_KEY = "polychat.sessionId";
 const USER_STORAGE_KEY = "polychat.userId";
@@ -61,6 +76,8 @@ export const useChatStore = defineStore("chat", {
     sessionId: null,
     userId: null,
     error: null,
+    conversations: [],
+    conversationsLoading: false,
   }),
   getters: {
     orderedMessages: (state) =>
@@ -181,6 +198,56 @@ export const useChatStore = defineStore("chat", {
         this.isSending = false;
       }
     },
+    async loadConversations() {
+      if (!this.userId) {
+        // No user yet; nothing to load
+        this.conversations = [];
+        return;
+      }
+      this.conversationsLoading = true;
+      try {
+        const params = new URLSearchParams({ userId: this.userId });
+        const response = await fetch(`${conversationsEndpoint}?${params.toString()}`, {
+          headers: supabaseAnonKey
+            ? { apikey: supabaseAnonKey, Authorization: `Bearer ${supabaseAnonKey}` }
+            : undefined,
+        });
+        if (!response.ok) throw new Error("Unable to load conversations");
+        const data = (await response.json()) as ListConversationsResponse;
+        this.conversations = data.conversations;
+      } finally {
+        this.conversationsLoading = false;
+      }
+    },
+    async startNewConversation(mentorId?: string) {
+      if (!this.userId) {
+        // If we don't have a user yet, trigger a lightweight chat to create one implicitly
+        // But to avoid sending a real message, we create a placeholder conversation via API when possible.
+      }
+      const response = await fetch(conversationsEndpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(supabaseAnonKey
+            ? { apikey: supabaseAnonKey, Authorization: `Bearer ${supabaseAnonKey}` }
+            : {}),
+        },
+        body: JSON.stringify({ userId: this.userId, mentorId: mentorId ?? this.activeMentor }),
+      });
+      if (!response.ok) throw new Error("Unable to start new conversation");
+      const conv = (await response.json()) as ConversationSummary;
+      // Set active session and mentor
+      this.sessionId = conv.id;
+      this.activeMentor = conv.mentorId;
+      this.messages = [];
+      // Update list and persist ids
+      await this.loadConversations();
+      this.persistSession();
+    },
+    async selectConversation(conversationId: string) {
+      // Load messages for an existing conversation via existing method
+      await this.fetchExistingConversation(conversationId);
+    },
     async fetchExistingConversation(conversationId: string) {
       this.isSending = true;
       this.error = null;
@@ -254,6 +321,10 @@ export const useChatStore = defineStore("chat", {
         this.fetchExistingConversation(this.sessionId).catch(() => {
           // handled in fetchExistingConversation
         });
+      }
+      // Also load conversation list once userId is known (may be set by fetchExistingConversation)
+      if (this.userId) {
+        this.loadConversations().catch(() => {});
       }
     },
     persistSession() {
