@@ -1,5 +1,6 @@
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'node:path';
 import express, { type Request, type Response } from 'express';
 import { z } from 'zod';
 import {
@@ -11,7 +12,18 @@ import {
   renameConversation
 } from './services/chatService';
 
-dotenv.config();
+// Load env from multiple likely locations to support monorepo runs
+const triedPaths: string[] = [];
+const tryLoad = (p: string) => {
+  triedPaths.push(p);
+  dotenv.config({ path: p, override: false });
+};
+// 1) working dir (apps/api when run via pnpm filter)
+tryLoad(path.resolve(process.cwd(), '.env'));
+// 2) alongside compiled file (dist -> load ../.env)
+tryLoad(path.resolve(__dirname, '../.env'));
+// 3) monorepo root (dist is apps/api/dist -> ../../../.env)
+tryLoad(path.resolve(__dirname, '../../../.env'));
 
 const app = express();
 

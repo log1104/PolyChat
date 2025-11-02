@@ -62,26 +62,35 @@ Run `pnpm install` at the root after cloning. If pnpm is not globally available,
 
 ## 5. Environment Variables
 
-1. Copy `.env.example` → `.env`
-2. Create per-app files if needed (`apps/web/.env.local`, etc.)
-3. Populate the following keys:
+Environment variables are split per-package for better isolation in the monorepo:
 
-```
-OPENROUTER_API_KEY=
-SUPABASE_URL=
-SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-STOCKFISH_API_URL=http://localhost:8787
-STOCKFISH_API_KEY=local-dev
-FINANCE_API_BASE=http://localhost:8899
-FINANCE_API_KEY=
-BIBLE_EMBED_MODEL=text-embedding-3-large
-PORT=3000
-VITE_API_BASE_URL=http://127.0.0.1:54321/functions/v1
-VITE_SUPABASE_ANON_KEY=
-```
+### 5.1 Root .env (Shared/Optional)
+- Copy `.env.example` → `.env` (if needed for shared vars; currently empty).
+- No secrets here—only placeholders or shared non-sensitive vars.
 
-Never commit `.env*` files. In Vercel, configure the same variables (with production values) via Project Settings or the Supabase integration.
+### 5.2 Web App (apps/web/.env.local)
+- Copy `apps/web/.env.example` → `apps/web/.env.local`.
+- Populate frontend-specific vars:
+  ```
+  VITE_API_BASE_URL=http://127.0.0.1:3000/api
+  VITE_SUPABASE_ANON_KEY=your-supabase-anon-key-here
+  ```
+- Restart Vite after changes (`pnpm --filter @polychat/web dev`).
+
+### 5.3 API Server (apps/api/.env)
+- Copy `apps/api/.env.example` → `apps/api/.env`.
+- Populate server secrets:
+  ```
+  SUPABASE_URL=http://127.0.0.1:54321
+  SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
+  ```
+- Optional: `PORT=3000` (defaults to 3000).
+
+### 5.4 Other Vars (Scripts, Supabase Functions)
+- For scripts or Supabase functions, use root `.env` or per-script env files.
+- Supabase functions read from `.env` in the repo root when served with `--env-file .env`.
+
+Never commit `.env*` files. In Vercel, configure vars via Project Settings.
 
 ## 6. Local Supabase Setup
 
