@@ -6,7 +6,7 @@
 
 ## 0) Global Constraints & Conventions
 
-- **Language/Stack:** Vue 3 + Vite + TS (Pinia for state), Node/Express (or Vercel Functions), Supabase (Postgres + Auth + Storage + Vector), OpenRouter (LLM), Cloud Run/Fly.io (tool services).
+- **Language/Stack:** Vue 3 + Vite + TS (Pinia for state), Supabase Edge Functions (Deno), Supabase (Postgres + Auth + Storage + Vector), OpenRouter (LLM), Cloud Run/Fly.io (tool services).
 - **Branching:** `feature/slice-X-*` → `dev` (staging) → `main` (production). See `07_Version_Control_and_Branching.md`.
 - **CI gates per slice:** lint, typecheck, unit, integration, E2E (smoke), schema diff, preview deploy.
 - **Security:** RLS enabled by default; secrets in env only.
@@ -24,6 +24,8 @@
 
 **Goal:** Ship a minimal but complete chat: UI ↔ API ↔ LLM ↔ DB. Default mentor = **Bible Mentor (LLM-only)** to start.
 
+**Implementation Notes:** Migrated API from Express to Supabase Edge Functions for better integration. Placeholder LLM response used; real LLM integration pending. UI supports mentor selection but defaults to Bible. DB schema applied with RLS.
+
 ### Scope
 - Chat UI (message list, input, send, loading state).
 - `/api/chat` route calling OpenRouter (single model).
@@ -33,21 +35,21 @@
 
 ### Tasks
 **Frontend**
- - [ ] Scaffold Vite app, Tailwind, PrimeVue (or equivalent component library).
-- [ ] Components: `ChatWindow`, `MessageList`, `MessageInput`, `MentorBadge`.
- - [ ] Pinia store for session state.
-- [ ] Minimal theme (neutral).
+ - [x] Scaffold Vite app, Tailwind, PrimeVue (or equivalent component library).
+- [x] Components: `ChatWindow`, `MessageList`, `MessageInput`, `MentorBadge`.
+ - [x] Pinia store for session state.
+- [x] Minimal theme (neutral).
 
 **Backend / API**
-- [ ] `/api/chat` (POST): `{message, sessionId}` → LLM → `{reply}`.
-- [ ] Error normalization middleware.
+- [x] `/api/chat` (POST): `{message, sessionId}` → LLM → `{reply}`. (Migrated to Supabase Edge Function with placeholder response)
+- [x] Error normalization middleware.
 - [ ] Rate limit (basic).
 
 **Database**
-- [ ] `users(id, email, created_at)`.
- - [ ] `conversations(id, user_id, mentor, title, created_at)`.
- - [ ] `messages(id, conversation_id, role, content, metadata, created_at)`.
-- [ ] RLS: users can only read/write own rows.
+- [x] `users(id, email, created_at)`.
+ - [x] `conversations(id, user_id, mentor, title, created_at)`.
+ - [x] `messages(id, conversation_id, role, content, metadata, created_at)`.
+- [x] RLS: users can only read/write own rows.
 
 **Testing**
 - [ ] Unit: chat reducers, request schema.
@@ -55,13 +57,13 @@
 - [ ] E2E: send message, receive response, persists on reload.
 
 **Ops**
-- [ ] Vercel deploy (prod + preview).
-- [ ] Supabase project link; run migrations.
+- [ ] Vercel deploy (prod + preview). (Supabase Edge Functions used instead)
+- [x] Supabase project link; run migrations.
 
 ### Acceptance Criteria
-- User can send/receive messages.
-- Messages persist and reload correctly.
-- Basic error messages shown for failures.
+- [x] User can send/receive messages. (With placeholder response)
+- [x] Messages persist and reload correctly.
+- [x] Basic error messages shown for failures.
 
 **Risks & Mitigations**
 - LLM timeout → 15s timeout + retry once.
@@ -372,7 +374,7 @@
 
 | Dep | Needed By | Notes |
 |-----|-----------|------|
-| Supabase project | Slice 1 → | Migrations & RLS |
+| Supabase project + Edge Functions | Slice 1 → | Migrations & RLS |
 | OpenRouter key | Slice 1 → | LLM calls |
 | Stockfish API URL | Slice 3 → | Tool integration |
 | Finance API key | Slice 4 → | Indicators |

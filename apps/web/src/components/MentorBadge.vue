@@ -9,8 +9,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
-import { getMentorThemeClasses } from '@/design/tokens';
+import { computed } from "vue";
+import { getMentorThemeClasses } from "@/design/tokens";
 
 const props = defineProps<{
   mentorId: string;
@@ -19,6 +19,6 @@ const props = defineProps<{
 
 const badgeClass = computed(() => {
   const theme = getMentorThemeClasses(props.mentorId as never);
-  return theme.badge ?? 'bg-slate-600';
+  return theme.badge ?? "bg-slate-600";
 });
 </script>

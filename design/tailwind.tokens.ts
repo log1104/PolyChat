@@ -9,29 +9,29 @@
 
 export const mentorColorTokens = {
   general: {
-    base: '#1f2933', // slate-800
-    accent: '#9aa5b1', // slate-400
-    gradient: ['#0f172a', '#1e293b'],
+    base: '#1f2937', // slate-800 closer to mock
+    accent: '#94a3b8', // slate-400/bluegray
+    gradient: ['#0b1220', '#1e293b'],
   },
   bible: {
     base: '#f59e0b', // amber-500
-    accent: '#fcd34d', // amber-300
-    gradient: ['#78350f', '#f59e0b'],
+    accent: '#fbbf24', // amber-400
+    gradient: ['#b45309', '#f59e0b'],
   },
   chess: {
-    base: '#4338ca', // indigo-600
+    base: '#4f46e5', // indigo-600 slightly brighter
     accent: '#a5b4fc', // indigo-300
-    gradient: ['#1e1b4b', '#4338ca'],
+    gradient: ['#3730a3', '#4f46e5'],
   },
   stock: {
     base: '#10b981', // emerald-500
-    accent: '#6ee7b7', // emerald-300
-    gradient: ['#064e3b', '#10b981'],
+    accent: '#34d399', // emerald-400
+    gradient: ['#065f46', '#10b981'],
   },
   math: {
     base: '#7c3aed', // violet-600
     accent: '#c4b5fd', // violet-300
-    gradient: ['#312e81', '#7c3aed'],
+    gradient: ['#3730a3', '#7c3aed'],
   },
 } as const;
 

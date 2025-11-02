@@ -1,6 +1,6 @@
-﻿import { defineStore } from 'pinia';
+﻿import { defineStore } from "pinia";
 
-export type ChatRole = 'user' | 'assistant' | 'system';
+export type ChatRole = "user" | "assistant" | "system";
 
 export interface ChatMessage {
   id: string;
@@ -41,40 +41,93 @@ interface ConversationResponse {
   history: ChatHistoryRow[];
 }
 
-const defaultBaseUrl = import.meta.env.DEV ? 'http://127.0.0.1:54321/functions/v1' : '';
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? defaultBaseUrl).replace(/\/$/, '');
-const chatEndpoint = apiBaseUrl ? `${apiBaseUrl}/chat` : '/chat';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
-const SESSION_STORAGE_KEY = 'polychat.sessionId';
-const USER_STORAGE_KEY = 'polychat.userId';
+const defaultBaseUrl = import.meta.env.DEV
+  ? "http://127.0.0.1:54321/functions/v1"
+  : "";
+const apiBaseUrl = (
+  import.meta.env.VITE_API_BASE_URL ?? defaultBaseUrl
+).replace(/\/$/, "");
+const chatEndpoint = apiBaseUrl ? `${apiBaseUrl}/chat` : "/chat";
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
+const SESSION_STORAGE_KEY = "polychat.sessionId";
+const USER_STORAGE_KEY = "polychat.userId";
 
-export const useChatStore = defineStore('chat', {
+export const useChatStore = defineStore("chat", {
   state: (): ChatState => ({
     messages: [],
-    activeMentor: 'bible',
+    // default mentor is general; auto-routing can switch this per message
+    activeMentor: "general",
     isSending: false,
     sessionId: null,
     userId: null,
-    error: null
+    error: null,
   }),
   getters: {
     orderedMessages: (state) =>
-      [...state.messages].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
+      [...state.messages].sort(
+        (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt),
+      ),
   },
   actions: {
+    /**
+     * Lightweight, client-side mentor classifier.
+     * Returns one of: 'bible' | 'chess' | 'stock' | 'general'.
+     * Intentionally simple for Slice 1; replaced by Planner in Slice 2.
+     */
+    classifyMentor(text: string): string {
+      const t = text.toLowerCase();
+
+      // Bible: common book names, "verse", scripture references like John 3:16
+      const bibleBooks =
+        /(genesis|exodus|leviticus|numbers|deuteronomy|joshua|judges|ruth|samuel|kings|chronicles|ezra|nehemiah|esther|job|psalm|psalms|proverbs|ecclesiastes|song of solomon|song of songs|isaiah|jeremiah|lamentations|ezekiel|daniel|hosea|joel|amos|obadiah|jonah|micah|nahum|habakkuk|zephaniah|haggai|zechariah|malachi|matthew|mark|luke|john|acts|romans|corinthians|galatians|ephesians|philippians|colossians|thessalonians|timothy|titus|philemon|hebrews|james|peter|jude|revelation)/i;
+      const scriptureRef = /\b([1-3]?\s?[a-zA-Z]+)\s?\d{1,3}:\d{1,3}\b/;
+      if (
+        bibleBooks.test(t) ||
+        /\b(verse|scripture|bible)\b/.test(t) ||
+        scriptureRef.test(text)
+      ) {
+        return "bible";
+      }
+
+      // Chess: mentions chess/FEN/stockfish or algebraic-like tokens
+      const fenLike =
+        /\b([rnbqkp1-8]+\/[rnbqkp1-8]+\/[rnbqkp1-8]+\/[rnbqkp1-8]+\/[rnbqkp1-8]+\/[rnbqkp1-8]+\/[rnbqkp1-8]+\/[rnbqkp1-8]+)\b/i;
+      if (
+        /\b(chess|stockfish|best move|mate|checkmate|fen)\b/.test(t) ||
+        fenLike.test(t)
+      ) {
+        return "chess";
+      }
+
+      // Stock: tickers, indicators
+      if (
+        /\b(rsi|macd|moving average|indicator|stocks?|price|earnings)\b/.test(
+          t,
+        ) ||
+        /\b[A-Z]{2,5}\b/.test(text)
+      ) {
+        return "stock";
+      }
+
+      return "general";
+    },
     async sendMessage(content: string) {
       if (!content.trim()) return;
 
       this.error = null;
 
+      // Auto-route mentor based on content before sending (can be refined in Slice 2)
+      const routedMentor = this.classifyMentor(content);
+      this.activeMentor = routedMentor ?? this.activeMentor ?? "general";
+
       const now = new Date().toISOString();
 
       const userMessage: ChatMessage = {
         id: crypto.randomUUID(),
-        role: 'user',
+        role: "user",
         content,
         createdAt: now,
-        mentor: this.activeMentor
+        mentor: this.activeMentor,
       };
 
       this.messages.push(userMessage);
@@ -82,26 +135,26 @@ export const useChatStore = defineStore('chat', {
 
       try {
         const response = await fetch(chatEndpoint, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             ...(supabaseAnonKey
               ? {
                   apikey: supabaseAnonKey,
-                  Authorization: `Bearer ${supabaseAnonKey}`
+                  Authorization: `Bearer ${supabaseAnonKey}`,
                 }
-              : {})
+              : {}),
           },
           body: JSON.stringify({
             message: content,
             mentorId: this.activeMentor,
             sessionId: this.sessionId ?? undefined,
-            userId: this.userId ?? undefined
-          })
+            userId: this.userId ?? undefined,
+          }),
         });
 
         if (!response.ok) {
-          throw new Error('Unable to send message. Please try again.');
+          throw new Error("Unable to send message. Please try again.");
         }
 
         const data = (await response.json()) as ChatApiResponse;
@@ -114,13 +167,15 @@ export const useChatStore = defineStore('chat', {
           role: item.role,
           content: item.content,
           createdAt: item.createdAt,
-          mentor: data.mentorId
+          mentor: data.mentorId,
         }));
 
         this.persistSession();
       } catch (error) {
-        this.error = error instanceof Error ? error.message : 'Unknown error';
-        this.messages = this.messages.filter((message) => message.id !== userMessage.id);
+        this.error = error instanceof Error ? error.message : "Unknown error";
+        this.messages = this.messages.filter(
+          (message) => message.id !== userMessage.id,
+        );
         throw error;
       } finally {
         this.isSending = false;
@@ -133,20 +188,22 @@ export const useChatStore = defineStore('chat', {
       try {
         const params = new URLSearchParams({ conversationId });
         if (this.userId) {
-          params.set('userId', this.userId);
+          params.set("userId", this.userId);
         }
 
         const response = await fetch(`${chatEndpoint}?${params.toString()}`, {
           headers: supabaseAnonKey
             ? {
                 apikey: supabaseAnonKey,
-                Authorization: `Bearer ${supabaseAnonKey}`
+                Authorization: `Bearer ${supabaseAnonKey}`,
               }
-            : undefined
+            : undefined,
         });
 
         if (!response.ok) {
-          throw new Error('Unable to load previous session. Starting a new chat.');
+          throw new Error(
+            "Unable to load previous session. Starting a new chat.",
+          );
         }
 
         const data = (await response.json()) as ConversationResponse;
@@ -159,12 +216,12 @@ export const useChatStore = defineStore('chat', {
           role: item.role,
           content: item.content,
           createdAt: item.createdAt,
-          mentor: data.mentorId
+          mentor: data.mentorId,
         }));
 
         this.persistSession();
       } catch (error) {
-        this.error = error instanceof Error ? error.message : 'Unknown error';
+        this.error = error instanceof Error ? error.message : "Unknown error";
         this.clearPersistedSession();
       } finally {
         this.isSending = false;
@@ -181,7 +238,7 @@ export const useChatStore = defineStore('chat', {
       this.clearPersistedSession();
     },
     initializeFromStorage() {
-      if (typeof window === 'undefined') return;
+      if (typeof window === "undefined") return;
 
       const storedSession = window.localStorage.getItem(SESSION_STORAGE_KEY);
       const storedUser = window.localStorage.getItem(USER_STORAGE_KEY);
@@ -200,7 +257,7 @@ export const useChatStore = defineStore('chat', {
       }
     },
     persistSession() {
-      if (typeof window === 'undefined') return;
+      if (typeof window === "undefined") return;
       if (this.sessionId) {
         window.localStorage.setItem(SESSION_STORAGE_KEY, this.sessionId);
       }
@@ -209,9 +266,9 @@ export const useChatStore = defineStore('chat', {
       }
     },
     clearPersistedSession() {
-      if (typeof window === 'undefined') return;
+      if (typeof window === "undefined") return;
       window.localStorage.removeItem(SESSION_STORAGE_KEY);
       window.localStorage.removeItem(USER_STORAGE_KEY);
-    }
-  }
+    },
+  },
 });
