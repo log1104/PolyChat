@@ -16,6 +16,12 @@ const corsHeaders: Record<string, string> = {
 
 const chatRequestSchema = z.object({
   message: z.string().min(1, "Message cannot be empty"),
+  files: z.array(z.object({
+    name: z.string(),
+    url: z.string(),
+    type: z.string(),
+    size: z.number()
+  })).optional(),
   mentorId: z.string().optional(),
   sessionId: z.string().optional(),
   userId: z.string().optional()
@@ -96,7 +102,7 @@ async function handleChatRequest(
     payload.sessionId
   );
 
-  await insertMessage(supabaseClient, conversationId, "user", payload.message, mentorId);
+  await insertMessage(supabaseClient, conversationId, "user", payload.message, mentorId, payload.files);
   await updateConversationSummary(
     supabaseClient,
     conversationId,
@@ -226,13 +232,14 @@ async function insertMessage(
   conversationId: string,
   role: "user" | "assistant",
   content: string,
-  mentorId: string
+  mentorId: string,
+  files?: { name: string; url: string; type: string; size: number }[]
 ) {
   const { error } = await supabaseClient.from("messages").insert({
     conversation_id: conversationId,
     role,
     content,
-    metadata: { mentor: mentorId }
+    metadata: { mentor: mentorId, files: files || [] }
   });
 
   if (error) {
@@ -288,7 +295,7 @@ async function fetchConversationMessages(
 ) {
   const { data, error } = await supabaseClient
     .from("messages")
-    .select("id, role, content, created_at")
+    .select("id, role, content, created_at, metadata")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: true });
 
@@ -300,7 +307,9 @@ async function fetchConversationMessages(
     id: row.id as string,
     role: row.role as "user" | "assistant" | "system",
     content: row.content as string,
-    createdAt: row.created_at as string
+    createdAt: row.created_at as string,
+    mentor: (row.metadata as any)?.mentor || "general",
+    files: (row.metadata as any)?.files || []
   }));
 }
 
