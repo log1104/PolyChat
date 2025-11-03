@@ -12,6 +12,34 @@
         placeholder="Ask a question or request help…"
         @keydown.enter.prevent="handleEnter"
       />
+
+      <!-- Attached files preview -->
+      <div v-if="selectedFiles.length" class="mt-2 flex flex-wrap gap-2">
+        <div
+          v-for="(file, index) in selectedFiles"
+          :key="index"
+          class="flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800/50 p-2 text-xs text-slate-300"
+        >
+          <img
+            v-if="file.type.startsWith('image/')"
+            :src="URL.createObjectURL(file)"
+            class="h-8 w-8 rounded object-cover"
+            alt="Preview"
+          />
+          <span v-else class="text-lg">{{ getFileIcon(file.type) }}</span>
+          <div class="flex-1 min-w-0">
+            <div class="truncate font-medium">{{ file.name }}</div>
+            <div class="text-slate-500">{{ formatFileSize(file.size) }}</div>
+          </div>
+          <button
+            type="button"
+            class="text-slate-400 hover:text-slate-200"
+            @click="removeFile(index)"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
     </label>
 
     <!-- Single unified upload input/button (auto-detects file type) -->
@@ -107,6 +135,29 @@ const handleUploadSelect = (event: Event) => {
   }
 };
 
+const removeFile = (index: number) => {
+  const file = selectedFiles.value[index];
+  if (file.type.startsWith('image/')) {
+    URL.revokeObjectURL(URL.createObjectURL(file)); // Clean up
+  }
+  selectedFiles.value.splice(index, 1);
+};
+
+const getFileIcon = (type: string) => {
+  if (type.startsWith('image/')) return '🖼️';
+  if (type.includes('pdf')) return '📄';
+  if (type.includes('text') || type.includes('csv')) return '📄';
+  return '📎';
+};
+
+const formatFileSize = (bytes: number) => {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
+
 const emitSubmit = async () => {
   if (!draft.value.trim() && selectedFiles.value.length === 0) return;
 
@@ -134,6 +185,12 @@ const emitSubmit = async () => {
 
   emit("submit", draft.value, uploadedFiles);
   draft.value = "";
+  // Clean up object URLs
+  selectedFiles.value.forEach(file => {
+    if (file.type.startsWith('image/')) {
+      URL.revokeObjectURL(URL.createObjectURL(file));
+    }
+  });
   selectedFiles.value = [];
   // Reset inputs
   if (fileInput.value) fileInput.value.value = '';
