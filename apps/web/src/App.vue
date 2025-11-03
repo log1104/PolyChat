@@ -1,33 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import ChatWindow from "./components/ChatWindow.vue";
-import MentorBadge from "./components/MentorBadge.vue";
 import { useChatStore } from "./stores/chat";
 
 const chatStore = useChatStore();
 
-const mentors = reactive([
-  {
-    id: "general",
-    name: "General Mentor",
-    description: "All-purpose reasoning assistant",
-  },
-  {
-    id: "bible",
-    name: "Bible Mentor",
-    description: "Scripture study and theology",
-  },
-  {
-    id: "chess",
-    name: "Chess Mentor",
-    description: "Position analysis and strategy",
-  },
-  {
-    id: "stock",
-    name: "Stock Mentor",
-    description: "Market indicators and insights",
-  },
-]);
+// Removed unused MentorBadge import and mentors array
 
 const draft = ref("");
 
@@ -36,23 +14,14 @@ const activeMentor = computed(() => chatStore.activeMentor);
 const isSending = computed(() => chatStore.isSending);
 const error = computed(() => chatStore.error);
 
-const isDrawerOpen = ref(false);
-const activePanel = ref<"history" | "mentors" | "settings">("history");
+// Collapsible left sidebar (Gemini-style): collapsed = icon-only rail, expanded = wide with labels
+const isSidebarExpanded = ref(false);
 
-const toggleHistoryDrawer = () => {
-  // Burger toggles the History panel. If History is already open, close it.
-  if (isDrawerOpen.value && activePanel.value === "history") {
-    isDrawerOpen.value = false;
-    return;
-  }
-  activePanel.value = "history";
-  isDrawerOpen.value = true;
+const toggleSidebar = () => {
+  isSidebarExpanded.value = !isSidebarExpanded.value;
 };
 
-const handleMentorSelect = (mentorId: string) => {
-  chatStore.setMentor(mentorId);
-  isDrawerOpen.value = false; // close drawer after selection
-};
+// Mentor selection is handled within chat flow; sidebar no longer switches panels
 
 const updateDraft = (value: string) => {
   draft.value = value;
@@ -72,87 +41,60 @@ onMounted(() => {
   chatStore.initializeFromStorage();
   // Load conversation list after initialization completes
   // If userId becomes available later, the store will load conversations itself
-  if (chatStore.userId) {
-    chatStore.loadConversations().catch(() => {});
-  }
+  // History list can be loaded lazily when we add the dedicated panel; not needed for sidebar toggle
+  // Also proactively check API health on app mount
+  chatStore.checkHealth().catch(() => {});
 });
 </script>
 
 <template>
   <main class="min-h-screen bg-slate-950 text-slate-50">
-    <!-- Fixed left icon rail -->
+    <!-- API health banner -->
+    <div v-if="chatStore.apiOnline === false" class="w-full bg-red-600/20 text-red-200">
+      <div class="mx-auto max-w-6xl px-4 py-2 text-sm">
+        API is unreachable. Ensure Supabase is running. Retry in a moment.
+        <span v-if="chatStore.lastHealthCheckAt" class="ml-2 text-xs text-red-300">
+          Last check: {{ new Date(chatStore.lastHealthCheckAt).toLocaleTimeString() }}
+        </span>
+      </div>
+    </div>
+
+    <!-- Collapsible left sidebar (rail expands to reveal labels) -->
     <aside
-      class="fixed inset-y-0 left-0 z-50 w-16 bg-slate-950/80 backdrop-blur supports-[backdrop-filter]:bg-slate-950/60"
+      class="fixed inset-y-0 left-0 z-50 bg-slate-950/80 backdrop-blur supports-[backdrop-filter]:bg-slate-950/60 transition-all duration-200"
+      :class="isSidebarExpanded ? 'w-72' : 'w-12'"
       aria-label="Primary toolbar"
+      :aria-expanded="isSidebarExpanded"
     >
-      <div class="flex h-full flex-col items-center py-4">
+      <div class="flex h-full flex-col py-4" :class="isSidebarExpanded ? 'items-start px-2' : 'items-center'">
         <button
           type="button"
-          aria-label="Toggle history"
-          title="Toggle history"
-          :aria-pressed="isDrawerOpen && activePanel === 'history'"
-          class="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-700 bg-slate-900 text-slate-50 shadow-sm transition hover:border-slate-500 hover:bg-slate-800"
+          aria-label="Toggle sidebar"
+          title="Toggle sidebar"
+          :aria-pressed="isSidebarExpanded"
+          class="mb-4 inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-slate-700 bg-slate-900 text-slate-50 shadow-sm transition hover:border-slate-500 hover:bg-slate-800"
           :class="{
-            'border-slate-400 bg-slate-800 text-white':
-              isDrawerOpen && activePanel === 'history',
+            'border-slate-400 bg-slate-800 text-white': isSidebarExpanded,
           }"
-          @click="toggleHistoryDrawer"
+          @click="toggleSidebar"
         >
-          <span aria-hidden="true" class="text-2xl leading-none">☰</span>
+          <span aria-hidden="true" class="text-xl leading-none">☰</span>
         </button>
 
-        <nav
-          class="flex flex-1 flex-col items-center gap-3"
-          aria-label="Icon rail"
-        >
+        <nav class="flex flex-col gap-2" aria-label="Icon rail">
+          <!-- Mentors -->
           <button
             type="button"
-            class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800 text-slate-300 transition hover:border-slate-700 hover:text-white"
-            :class="{
-              'border-slate-700 bg-slate-900/70 text-white':
-                activePanel === 'history' && isDrawerOpen,
-            }"
-            aria-label="Chat history"
-            @click="
-              activePanel = 'history';
-              isDrawerOpen = true;
-            "
-          >
-            <!-- history icon -->
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              class="h-5 w-5"
-            >
-              <path
-                d="M4 12a8 8 0 1 0 4-6.928V3M4 4v5h5"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </button>
-          <button
-            type="button"
-            class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800 text-slate-300 transition hover:border-slate-700 hover:text-white"
-            :class="{
-              'border-slate-700 bg-slate-900/70 text-white':
-                activePanel === 'mentors' && isDrawerOpen,
-            }"
+            class="group inline-flex items-center rounded-xl border border-slate-800 text-slate-300 transition hover:border-slate-700 hover:text-white"
+            :class="isSidebarExpanded ? 'gap-2.5 px-2.5 py-1.5 w-full' : 'h-9 w-9 justify-center'"
             aria-label="Mentors"
-            @click="
-              activePanel = 'mentors';
-              isDrawerOpen = true;
-            "
           >
             <!-- user-group icon -->
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 24 24"
               fill="none"
-              class="h-5 w-5"
+              class="h-4 w-4 flex-none"
             >
               <path
                 d="M16 14a4 4 0 1 1 4 4M4 18a4 4 0 1 1 8 0M12 9a4 4 0 1 1 8 0M2 10a4 4 0 1 0 8 0"
@@ -161,46 +103,64 @@ onMounted(() => {
                 stroke-linecap="round"
               />
             </svg>
+            <span v-if="isSidebarExpanded" class="truncate text-sm text-slate-200">Mentors</span>
           </button>
+
+          <!-- Settings -->
           <button
             type="button"
-            class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800 text-slate-300 transition hover:border-slate-700 hover:text-white"
-            :class="{
-              'border-slate-700 bg-slate-900/70 text-white':
-                activePanel === 'settings' && isDrawerOpen,
-            }"
+            class="group inline-flex items-center rounded-xl border border-slate-800 text-slate-300 transition hover:border-slate-700 hover:text-white"
+            :class="isSidebarExpanded ? 'gap-2.5 px-2.5 py-1.5 w-full' : 'h-9 w-9 justify-center'"
             aria-label="Settings"
-            @click="
-              activePanel = 'settings';
-              isDrawerOpen = true;
-            "
           >
             <!-- gear icon -->
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 24 24"
               fill="none"
-              class="h-5 w-5"
+              class="h-4 w-4 flex-none"
             >
               <path
-                d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.5-3a7.5 7.5 0 0 1-.14 1.41l2.17 1.68-2 3.46-2.54-.64a7.5 7.5 0 0 1-2.45 1.41l-.39 2.6h-4l-.39-2.6A7.5 7.5 0 0 1 9 19.32l-2.54.64-2-3.46 2.17-1.68A7.5 7.5 0 0 1 6 12c0-.49.05-.97.14-1.41L4 8.91l2-3.46L8.54 6a7.5 7.5 0 0 1 2.45-1.41l.39-2.6h4l.39 2.6A7.5 7.5 0 0 1 15 6l2.54-.64 2 3.46-2.17 1.68c.09.44.13.92.13 1.41Z"
+                d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.5-3a7.5 7.5 0 0 1-.14 1.41l2.17 1.68-2 3.46-2.54-.64a7.5 7.5 0 0 1-2.45 1.41l-.39 2.6h-4l-.39 2.6A7.5 7.5 0 0 1 9 19.32l-2.54.64-2-3.46 2.17-1.68A7.5 7.5 0 0 1 6 12c0-.49.05-.97.14-1.41L4 8.91l2-3.46L8.54 6a7.5 7.5 0 0 1 2.45-1.41l.39-2.6h4l.39 2.6A7.5 7.5 0 0 1 15 6l2.54-.64 2 3.46-2.17 1.68c.09.44.13.92.13 1.41Z"
                 stroke="currentColor"
                 stroke-width="2"
                 stroke-linecap="round"
                 stroke-linejoin="round"
               />
             </svg>
+            <span v-if="isSidebarExpanded" class="truncate text-sm text-slate-200">Settings</span>
           </button>
+
+          <!-- Recent conversations list (visible when expanded) -->
+          <div v-if="isSidebarExpanded" class="mt-4 w-full">
+            <div class="px-1.5 pb-1 text-[11px] font-medium uppercase tracking-wide text-slate-400">Recent</div>
+            <ul class="max-h-60 space-y-1 overflow-auto pr-1">
+              <li v-if="chatStore.conversationsLoading" class="px-2 text-xs text-slate-500">Loading…</li>
+              <li v-else-if="!chatStore.conversations.length" class="px-2 text-xs text-slate-500">No conversations yet</li>
+              <li v-for="conv in chatStore.conversations" :key="conv.id">
+                <button
+                  type="button"
+                  class="group flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-[13px] text-slate-300 hover:bg-slate-800/60 hover:text-white"
+                  @click="chatStore.selectConversation(conv.id)"
+                >
+                  <span class="line-clamp-1">{{ conv.preview || conv.title || 'New chat' }}</span>
+                  <span class="ml-2 shrink-0 text-[10px] text-slate-500">{{ new Date(conv.createdAt).toLocaleDateString() }}</span>
+                </button>
+              </li>
+            </ul>
+          </div>
         </nav>
 
-        <div class="mt-auto text-[10px] text-slate-500">v0.1</div>
+        <div class="flex-1"></div>
+
+        <div class="mt-auto w-full px-0.5 text-[10px] text-slate-500" :class="isSidebarExpanded ? 'text-left' : 'text-center'">v0.1</div>
       </div>
     </aside>
 
-    <!-- Main content with left gap equal to rail width + gutter -->
-    <div class="pl-20">
-      <div class="mx-auto min-h-screen max-w-6xl px-6 py-6 lg:py-10">
-        <section>
+    <!-- Main content: pad-left matches sidebar width with a slim gutter -->
+    <div class="transition-all duration-200" :class="isSidebarExpanded ? 'pl-[20rem]' : 'pl-8'">
+      <div class="mx-auto min-h-screen max-w-5xl px-4 py-6 lg:py-10">
+  <section class="mx-auto w-full max-w-4xl">
           <ChatWindow
             :messages="messages"
             :active-mentor="activeMentor"
@@ -214,148 +174,5 @@ onMounted(() => {
         </section>
       </div>
     </div>
-
-    <!-- Drawer overlay (does not cover the icon rail) -->
-    <div
-      v-show="isDrawerOpen"
-      class="fixed inset-y-0 left-16 right-0 z-40 bg-slate-950/60 backdrop-blur-[1px]"
-      @click="isDrawerOpen = false"
-    />
-
-    <!-- Side drawer aligned to the right of the rail, slides in/out -->
-    <transition
-      enter-active-class="transform transition duration-200 ease-out"
-      enter-from-class="-translate-x-full opacity-0"
-      enter-to-class="translate-x-0 opacity-100"
-      leave-active-class="transform transition duration-150 ease-in"
-      leave-from-class="translate-x-0 opacity-100"
-      leave-to-class="-translate-x-full opacity-0"
-    >
-      <aside
-        v-if="isDrawerOpen"
-        class="fixed inset-y-0 left-16 z-50 w-80 max-w-[90vw] transform border-r border-slate-800/80 bg-slate-900/80 shadow-card backdrop-blur"
-        role="dialog"
-        aria-label="Side panel"
-      >
-        <div class="relative flex h-full flex-col p-6">
-        <div class="mb-4 flex items-center justify-between pr-12">
-          <div>
-            <h2 class="text-lg font-semibold text-slate-100">
-              {{
-                activePanel === "history"
-                  ? "Chat history"
-                  : activePanel === "mentors"
-                    ? "Choose a mentor"
-                    : "Settings"
-              }}
-            </h2>
-            <p class="text-xs text-slate-400" v-if="activePanel === 'mentors'">
-              Mentor affects styling and context hints.
-            </p>
-            <p class="text-xs text-slate-400" v-if="activePanel === 'history'">
-              Recent conversations will appear here.
-            </p>
-            <p class="text-xs text-slate-400" v-if="activePanel === 'settings'">
-              Customize your experience.
-            </p>
-          </div>
-          <!-- Close button removed; overlay and rail toggle handle closing -->
-        </div>
-
-        <!-- Panel content -->
-        <div class="min-h-0 flex-1 overflow-y-auto pr-1">
-          <!-- History List -->
-          <div v-if="activePanel === 'history'" class="space-y-3">
-            <div class="flex items-center gap-2">
-              <button
-                type="button"
-                class="inline-flex items-center gap-2 rounded-xl border border-slate-800/60 bg-slate-900/70 px-3 py-2 text-xs text-slate-200 transition hover:border-slate-700 hover:bg-slate-800"
-                @click="chatStore.startNewConversation()"
-              >
-                New chat
-              </button>
-            </div>
-
-            <div class="mt-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              Recent
-            </div>
-
-            <div v-if="chatStore.conversationsLoading" class="space-y-2 text-xs text-slate-400">
-              <p>Loading conversations…</p>
-            </div>
-
-            <ul v-else class="space-y-2">
-              <li
-                v-for="conv in chatStore.conversations"
-                :key="conv.id"
-              >
-                <button
-                  type="button"
-                  class="w-full rounded-xl border border-slate-800/60 bg-slate-900/60 p-3 text-left transition hover:border-slate-700 hover:bg-slate-800"
-                  :class="{ 'border-slate-600 bg-slate-800': conv.id === chatStore.sessionId }"
-                  @click="chatStore.selectConversation(conv.id); isDrawerOpen = false;"
-                >
-                  <div class="flex items-center justify-between">
-                    <div class="truncate">
-                      <div class="truncate text-sm font-medium text-slate-100">
-                        {{ conv.title || 'New chat' }}
-                      </div>
-                      <div class="truncate text-xs text-slate-400">
-                        {{ new Date(conv.createdAt).toLocaleString() }} · {{ conv.mentorId }}
-                      </div>
-                    </div>
-                    <MentorBadge :mentor-id="conv.mentorId" :title="''" />
-                  </div>
-                </button>
-              </li>
-            </ul>
-
-            <div v-if="!chatStore.conversationsLoading && chatStore.conversations.length === 0" class="text-xs text-slate-400">
-              <p>No history yet. Your conversations will appear here.</p>
-            </div>
-          </div>
-
-          <!-- Mentors: reuse selector -->
-          <ul v-if="activePanel === 'mentors'" class="space-y-3">
-            <li v-for="mentor in mentors" :key="mentor.id">
-              <button
-                type="button"
-                class="w-full rounded-2xl border border-slate-800/60 p-4 text-left transition hover:border-mentor hover:bg-slate-800/70"
-                :class="{
-                  'border-mentor bg-slate-800/70 text-white shadow-card':
-                    mentor.id === activeMentor,
-                }"
-                @click="handleMentorSelect(mentor.id)"
-              >
-                <div class="flex items-center justify-between">
-                  <span class="font-semibold">{{ mentor.name }}</span>
-                  <MentorBadge
-                    v-if="mentor.id === activeMentor"
-                    :mentor-id="mentor.id"
-                    :title="'Active'"
-                  />
-                </div>
-                <p class="mt-1 text-xs text-slate-400">
-                  {{ mentor.description }}
-                </p>
-              </button>
-            </li>
-          </ul>
-
-          <!-- Settings placeholder -->
-          <div
-            v-if="activePanel === 'settings'"
-            class="space-y-3 text-sm text-slate-300"
-          >
-            <div
-              class="rounded-xl border border-slate-800/70 bg-slate-900/70 p-3"
-            >
-              <p class="text-xs text-slate-400">Settings coming soon.</p>
-            </div>
-          </div>
-        </div>
-        </div>
-      </aside>
-    </transition>
   </main>
 </template>

@@ -27,6 +27,7 @@ export interface ConversationSummary {
   mentorId: string;
   title: string | null;
   createdAt: string;
+  preview?: string; // first few words of the first user message
 }
 
 const DEFAULT_ASSISTANT_REPLY_PREFIX =
@@ -190,13 +191,28 @@ export async function listConversations(
     throw new Error(`Failed to list conversations: ${error?.message ?? 'unknown error'}`);
   }
 
-  return data.map((row) => ({
-    id: row.id as string,
-    userId: row.user_id as string,
-    mentorId: row.mentor as string,
-    title: (row as any).title ?? null,
-    createdAt: (row as any).created_at as string
-  }));
+  // Attach a lightweight preview generated from the first user message
+  const results: ConversationSummary[] = [];
+  for (const row of data) {
+    const id = row.id as string;
+    let preview: string | undefined;
+    try {
+      const first = await fetchFirstUserMessage(id);
+      if (first) preview = makePreview(first, 8);
+    } catch {
+      // non-fatal; leave preview undefined
+    }
+    results.push({
+      id,
+      userId: row.user_id as string,
+      mentorId: row.mentor as string,
+      title: (row as any).title ?? null,
+      createdAt: (row as any).created_at as string,
+      preview
+    });
+  }
+
+  return results;
 }
 
 export async function createConversation(userId: string, mentorId = 'general'): Promise<ConversationSummary> {
@@ -219,7 +235,8 @@ export async function createConversation(userId: string, mentorId = 'general'): 
     userId: data.user_id as string,
     mentorId: data.mentor as string,
     title: (data as any).title ?? null,
-    createdAt: (data as any).created_at as string
+    createdAt: (data as any).created_at as string,
+    preview: undefined
   };
 }
 
@@ -280,4 +297,25 @@ export async function getConversationMessages(
     content: row.content,
     createdAt: row.created_at
   }));
+}
+
+// Helpers
+function makePreview(text: string, maxWords = 8): string {
+  const words = text.trim().replace(/\s+/g, ' ').split(' ');
+  if (words.length <= maxWords) return text.trim();
+  return words.slice(0, maxWords).join(' ') + '…';
+}
+
+async function fetchFirstUserMessage(conversationId: string): Promise<string | undefined> {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('content, role, created_at')
+    .eq('conversation_id', conversationId)
+    .eq('role', 'user')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) return undefined;
+  return (data as { content?: string } | null)?.content ?? undefined;
 }

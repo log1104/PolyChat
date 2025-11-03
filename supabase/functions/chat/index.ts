@@ -2,6 +2,12 @@ import { serve } from "https://deno.land/std@0.203.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined;
+  };
+};
+
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -20,9 +26,11 @@ const getConversationSchema = z.object({
   userId: z.string().optional()
 });
 
+const PREVIEW_MAX_LENGTH = 80;
+
 type ChatRequestPayload = z.infer<typeof chatRequestSchema>;
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -40,6 +48,11 @@ serve(async (req) => {
   const supabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey, {
     auth: { persistSession: false }
   });
+
+  // Health check endpoint
+  if (new URL(req.url).pathname.endsWith('/health')) {
+    return respond({ status: 'ok' }, 200);
+  }
 
   try {
     if (req.method === "POST") {
@@ -59,10 +72,13 @@ serve(async (req) => {
     console.error("[chat] error", error);
 
     if (error instanceof z.ZodError) {
-      return respond({ error: true, message: "Invalid payload", details: error.flatten() }, 400);
+      const zodError = error as z.ZodError;
+      const details = zodError.flatten();
+      return respond({ error: true, message: "Invalid payload", details }, 400);
     }
 
-    return respond({ error: true, message: error?.message ?? "Unexpected error" }, 500);
+    const message = error instanceof Error ? error.message : "Unexpected error";
+    return respond({ error: true, message }, 500);
   }
 });
 
@@ -73,13 +89,26 @@ async function handleChatRequest(
   const mentorId = payload.mentorId ?? "bible";
 
   const userId = await ensureUser(supabaseClient, payload.userId);
-  const conversationId = await ensureConversation(supabaseClient, userId, mentorId, payload.sessionId);
+  const { id: conversationId, created: conversationCreated } = await ensureConversation(
+    supabaseClient,
+    userId,
+    mentorId,
+    payload.sessionId
+  );
 
   await insertMessage(supabaseClient, conversationId, "user", payload.message, mentorId);
+  await updateConversationSummary(
+    supabaseClient,
+    conversationId,
+    payload.message,
+    "user",
+    conversationCreated
+  );
 
   const assistantReply = `This is a placeholder response until mentor intelligence is integrated. You said: ${payload.message}`;
 
   await insertMessage(supabaseClient, conversationId, "assistant", assistantReply, mentorId);
+  await updateConversationSummary(supabaseClient, conversationId, assistantReply, "assistant", false);
 
   const history = await fetchConversationMessages(supabaseClient, conversationId);
 
@@ -153,9 +182,24 @@ async function ensureConversation(
   userId: string,
   mentorId: string,
   existingConversationId?: string
-): Promise<string> {
+): Promise<{ id: string; created: boolean }> {
   if (existingConversationId) {
-    return existingConversationId;
+    const { data, error } = await supabaseClient
+      .from("conversations")
+      .select("id, preview")
+      .eq("id", existingConversationId)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Failed to load conversation: ${error.message}`);
+    }
+
+    if (!data) {
+      // Conversation id not found; create a new one to keep flow working
+      return await ensureConversation(supabaseClient, userId, mentorId, undefined);
+    }
+
+    return { id: data.id as string, created: data.preview == null };
   }
 
   const { data, error } = await supabaseClient
@@ -163,7 +207,9 @@ async function ensureConversation(
     .insert({
       user_id: userId,
       mentor: mentorId,
-      title: `Session started ${new Date().toLocaleString()}`
+      title: null,
+      preview: null,
+      last_message_at: new Date().toISOString()
     })
     .select("id")
     .single();
@@ -172,7 +218,7 @@ async function ensureConversation(
     throw new Error(`Failed to create conversation: ${error?.message ?? "Unknown error"}`);
   }
 
-  return data.id as string;
+  return { id: data.id as string, created: true };
 }
 
 async function insertMessage(
@@ -194,6 +240,48 @@ async function insertMessage(
   }
 }
 
+async function updateConversationSummary(
+  supabaseClient: ReturnType<typeof createClient>,
+  conversationId: string,
+  content: string,
+  role: "user" | "assistant",
+  _isNewConversation: boolean
+) {
+  const nowIso = new Date().toISOString();
+
+  if (role === "user") {
+    const snippet = buildPreviewSnippet(content);
+    if (snippet) {
+      const { error: previewError } = await supabaseClient
+        .from("conversations")
+        .update({ preview: snippet, title: snippet })
+        .eq("id", conversationId)
+        .is("preview", null);
+
+      if (previewError) {
+        console.error("[chat] failed to set conversation preview", previewError);
+      }
+    }
+  }
+
+  const { error } = await supabaseClient
+    .from("conversations")
+    .update({ last_message_at: nowIso })
+    .eq("id", conversationId);
+
+  if (error) {
+    console.error("[chat] failed to update conversation timestamp", error);
+  }
+}
+
+function buildPreviewSnippet(content: string): string {
+  const normalized = content.replace(/\s+/g, " ").trim();
+  if (normalized.length <= PREVIEW_MAX_LENGTH) {
+    return normalized;
+  }
+  return `${normalized.slice(0, PREVIEW_MAX_LENGTH - 1)}…`;
+}
+
 async function fetchConversationMessages(
   supabaseClient: ReturnType<typeof createClient>,
   conversationId: string
@@ -208,7 +296,7 @@ async function fetchConversationMessages(
     throw new Error(`Failed to load conversation messages: ${error?.message ?? "Unknown error"}`);
   }
 
-  return data.map((row) => ({
+  return data.map((row: Record<string, unknown>) => ({
     id: row.id as string,
     role: row.role as "user" | "assistant" | "system",
     content: row.content as string,

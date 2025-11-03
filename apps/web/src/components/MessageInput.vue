@@ -1,6 +1,6 @@
 <template>
   <form
-    class="flex items-end gap-4 rounded-3xl border border-slate-800/60 bg-slate-900/60 p-5 shadow-card"
+    class="flex items-end gap-3 rounded-3xl border border-slate-800/60 bg-slate-900/60 p-4 shadow-card"
   >
     <label class="flex-1">
       <span class="sr-only">Message</span>
@@ -8,7 +8,7 @@
         v-model="draft"
         :disabled="disabled"
         rows="3"
-        class="h-24 w-full resize-none rounded-2xl border border-slate-800/60 bg-slate-950/80 p-4 text-sm text-slate-100 placeholder-slate-400 shadow-inner focus:border-mentor focus:outline-none"
+        class="h-20 w-full resize-none rounded-2xl border border-slate-800/60 bg-slate-950/80 p-3 text-sm text-slate-100 placeholder-slate-400 shadow-inner focus:border-mentor focus:outline-none"
         placeholder="Ask a question or request help…"
         @keydown.enter.prevent="handleEnter"
       />
@@ -16,14 +16,14 @@
 
     <button
       type="button"
-      class="inline-flex h-12 w-12 items-center justify-center rounded-full bg-mentor text-white shadow-card transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+      class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-mentor text-white shadow-card transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
       :disabled="disabled || !draft.trim()"
       @click="emitSubmit"
     >
       <span class="sr-only">Send</span>
       <svg
         xmlns="http://www.w3.org/2000/svg"
-        class="h-4 w-4"
+        class="h-3.5 w-3.5"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"

@@ -1,6 +1,6 @@
 <template>
   <section
-    class="flex h-full flex-col gap-5 rounded-3xl border border-slate-800/70 bg-slate-900/70 p-6 shadow-card"
+    class="flex h-full flex-col gap-4 rounded-3xl border border-slate-800/70 bg-slate-900/70 p-5 shadow-card"
   >
     <header class="flex items-center justify-between">
       <MentorBadge :mentor-id="activeMentor" :title="mentorTitle" />

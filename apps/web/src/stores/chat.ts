@@ -16,6 +16,8 @@ export interface ConversationSummary {
   mentorId: string;
   title: string | null;
   createdAt: string;
+  preview?: string;
+  lastMessageAt?: string;
 }
 
 interface ChatState {
@@ -27,6 +29,8 @@ interface ChatState {
   error: string | null;
   conversations: ConversationSummary[];
   conversationsLoading: boolean;
+  apiOnline: boolean | null; // null = unknown, true = reachable, false = unreachable
+  lastHealthCheckAt: string | null;
 }
 
 interface ChatHistoryRow {
@@ -63,6 +67,7 @@ const apiBaseUrl = (
 ).replace(/\/$/, "");
 const chatEndpoint = apiBaseUrl ? `${apiBaseUrl}/chat` : "/chat";
 const conversationsEndpoint = apiBaseUrl ? `${apiBaseUrl}/conversations` : "/conversations";
+const healthEndpoint = apiBaseUrl ? `${apiBaseUrl}/chat/health` : "/health";
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
 const SESSION_STORAGE_KEY = "polychat.sessionId";
 const USER_STORAGE_KEY = "polychat.userId";
@@ -78,6 +83,8 @@ export const useChatStore = defineStore("chat", {
     error: null,
     conversations: [],
     conversationsLoading: false,
+    apiOnline: null,
+    lastHealthCheckAt: null,
   }),
   getters: {
     orderedMessages: (state) =>
@@ -174,7 +181,8 @@ export const useChatStore = defineStore("chat", {
           throw new Error("Unable to send message. Please try again.");
         }
 
-        const data = (await response.json()) as ChatApiResponse;
+  const data = (await response.json()) as ChatApiResponse;
+  this.apiOnline = true;
         this.sessionId = data.conversationId;
         this.userId = data.userId;
         this.activeMentor = data.mentorId;
@@ -187,15 +195,33 @@ export const useChatStore = defineStore("chat", {
           mentor: data.mentorId,
         }));
 
-        this.persistSession();
+  this.persistSession();
+  // Refresh conversations so History reflects latest changes
+  // Safe to fire-and-forget; errors are non-fatal
+  this.loadConversations().catch(() => {});
       } catch (error) {
         this.error = error instanceof Error ? error.message : "Unknown error";
+        this.apiOnline = false; // likely network/API down
         this.messages = this.messages.filter(
           (message) => message.id !== userMessage.id,
         );
         throw error;
       } finally {
         this.isSending = false;
+      }
+    },
+    async checkHealth() {
+      try {
+        const res = await fetch(healthEndpoint, {
+          headers: supabaseAnonKey
+            ? { apikey: supabaseAnonKey, Authorization: `Bearer ${supabaseAnonKey}` }
+            : undefined,
+        });
+        this.apiOnline = res.ok;
+      } catch {
+        this.apiOnline = false;
+      } finally {
+        this.lastHealthCheckAt = new Date().toISOString();
       }
     },
     async loadConversations() {
@@ -273,7 +299,8 @@ export const useChatStore = defineStore("chat", {
           );
         }
 
-        const data = (await response.json()) as ConversationResponse;
+  const data = (await response.json()) as ConversationResponse;
+  this.apiOnline = true;
         this.sessionId = data.conversationId;
         this.userId = data.userId;
         this.activeMentor = data.mentorId;
@@ -286,9 +313,12 @@ export const useChatStore = defineStore("chat", {
           mentor: data.mentorId,
         }));
 
-        this.persistSession();
+  this.persistSession();
+  // Keep conversation list in sync when switching
+  this.loadConversations().catch(() => {});
       } catch (error) {
         this.error = error instanceof Error ? error.message : "Unknown error";
+        this.apiOnline = false; // network/API issue
         this.clearPersistedSession();
       } finally {
         this.isSending = false;
@@ -300,9 +330,8 @@ export const useChatStore = defineStore("chat", {
     resetChat() {
       this.messages = [];
       this.sessionId = null;
-      this.userId = null;
       this.error = null;
-      this.clearPersistedSession();
+      this.clearPersistedSession({ clearUser: false });
     },
     initializeFromStorage() {
       if (typeof window === "undefined") return;
@@ -326,6 +355,8 @@ export const useChatStore = defineStore("chat", {
       if (this.userId) {
         this.loadConversations().catch(() => {});
       }
+      // Kick off an API health check on load
+      this.checkHealth().catch(() => {});
     },
     persistSession() {
       if (typeof window === "undefined") return;
@@ -336,10 +367,12 @@ export const useChatStore = defineStore("chat", {
         window.localStorage.setItem(USER_STORAGE_KEY, this.userId);
       }
     },
-    clearPersistedSession() {
+    clearPersistedSession(options?: { clearUser?: boolean }) {
       if (typeof window === "undefined") return;
       window.localStorage.removeItem(SESSION_STORAGE_KEY);
-      window.localStorage.removeItem(USER_STORAGE_KEY);
+      if (options?.clearUser !== false) {
+        window.localStorage.removeItem(USER_STORAGE_KEY);
+      }
     },
   },
 });
