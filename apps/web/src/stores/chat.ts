@@ -2,12 +2,20 @@
 
 export type ChatRole = "user" | "assistant" | "system";
 
+export interface ChatFile {
+  name: string;
+  url: string;
+  type: string;
+  size: number;
+}
+
 export interface ChatMessage {
   id: string;
   role: ChatRole;
   content: string;
   createdAt: string;
   mentor: string;
+  files?: ChatFile[];
 }
 
 export interface ConversationSummary {
@@ -135,14 +143,32 @@ export const useChatStore = defineStore("chat", {
 
       return "general";
     },
-    async sendMessage(content: string) {
+    /**
+     * Classify mentor based on uploaded files (mime or extension).
+     * Simple heuristics: images -> chess, csv -> stock, docs/txt/pdf -> bible
+     */
+    classifyFromFiles(files: ChatFile[]): string | null {
+      if (!files || !files.length) return null;
+      for (const f of files) {
+        const name = (f.name || "").toLowerCase();
+        const type = f.type || "";
+
+        if (type.startsWith("image/")) return "chess";
+        if (name.endsWith(".csv") || type.includes("csv")) return "stock";
+        if (name.endsWith(".txt") || name.endsWith(".pdf") || name.endsWith(".docx")) return "bible";
+      }
+      return null;
+    },
+    async sendMessage(content: string, files: ChatFile[] = []) {
       if (!content.trim()) return;
 
       this.error = null;
 
-      // Auto-route mentor based on content before sending (can be refined in Slice 2)
-      const routedMentor = this.classifyMentor(content);
-      this.activeMentor = routedMentor ?? this.activeMentor ?? "general";
+  // Auto-route mentor based on content or uploaded files before sending
+  let routedMentor = this.classifyMentor(content);
+  const fileBased = (files && files.length) ? this.classifyFromFiles(files) : null;
+  if (fileBased) routedMentor = fileBased;
+  this.activeMentor = routedMentor ?? this.activeMentor ?? "general";
 
       const now = new Date().toISOString();
 
@@ -152,6 +178,7 @@ export const useChatStore = defineStore("chat", {
         content,
         createdAt: now,
         mentor: this.activeMentor,
+        files,
       };
 
       this.messages.push(userMessage);
@@ -171,6 +198,7 @@ export const useChatStore = defineStore("chat", {
           },
           body: JSON.stringify({
             message: content,
+            files,
             mentorId: this.activeMentor,
             sessionId: this.sessionId ?? undefined,
             userId: this.userId ?? undefined,

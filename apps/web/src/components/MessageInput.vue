@@ -14,10 +14,30 @@
       />
     </label>
 
+    <!-- Single unified upload input/button (auto-detects file type) -->
+    <input
+      ref="fileInput"
+      type="file"
+      accept="image/*,.txt,.pdf,.docx,.csv"
+      multiple
+      class="hidden"
+      @change="handleUploadSelect"
+    />
+
+    <button
+      type="button"
+      class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-700 bg-slate-800 text-slate-300 transition hover:border-slate-500 hover:bg-slate-700"
+      :disabled="disabled"
+      @click="triggerUpload"
+    >
+      <span class="sr-only">Upload</span>
+      📎
+    </button>
+
     <button
       type="button"
       class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-mentor text-white shadow-card transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-      :disabled="disabled || !draft.trim()"
+      :disabled="disabled || (!draft.trim() && selectedFiles.length === 0)"
       @click="emitSubmit"
     >
       <span class="sr-only">Send</span>
@@ -41,6 +61,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { supabase } from "@/lib/supabase";
 import { mentorColorTokens } from "@/design/tokens";
 
 const props = defineProps<{
@@ -51,10 +72,12 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "update:modelValue", value: string): void;
-  (e: "submit"): void;
+  (e: "submit", content: string, files: any[]): void;
 }>();
 
 const draft = ref(props.modelValue);
+const selectedFiles = ref<File[]>([]);
+const fileInput = ref<HTMLInputElement>();
 
 watch(
   () => props.modelValue,
@@ -73,13 +96,48 @@ watch(
   { immediate: true },
 );
 
-const emitSubmit = () => {
-  if (!draft.value.trim()) return;
+watch(draft, (value) => emit("update:modelValue", value));
 
-  emit("submit");
+const triggerUpload = () => fileInput.value?.click();
+
+const handleUploadSelect = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  if (target.files) {
+    selectedFiles.value.push(...Array.from(target.files));
+  }
 };
 
-watch(draft, (value) => emit("update:modelValue", value));
+const emitSubmit = async () => {
+  if (!draft.value.trim() && selectedFiles.value.length === 0) return;
+
+  // Upload files to Supabase
+  const uploadedFiles = [];
+  for (const file of selectedFiles.value) {
+    try {
+      const fileName = `${Date.now()}-${file.name}`;
+      const { data, error } = await supabase.storage
+        .from('uploads')
+        .upload(fileName, file);
+
+      if (error) throw error;
+      uploadedFiles.push({
+        name: file.name,
+        url: data.path,
+        type: file.type,
+        size: file.size,
+      });
+    } catch (error) {
+      console.error('Upload failed:', error);
+      // For now, skip failed uploads
+    }
+  }
+
+  emit("submit", draft.value, uploadedFiles);
+  draft.value = "";
+  selectedFiles.value = [];
+  // Reset inputs
+  if (fileInput.value) fileInput.value.value = '';
+};
 
 const disabled = computed(() => props.disabled ?? false);
 
