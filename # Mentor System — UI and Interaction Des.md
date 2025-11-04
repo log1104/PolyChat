@@ -73,17 +73,17 @@ Copy code
 4.2 Message Input Bar
 Multi-line input (Shift + Enter for newline)
 
-File upload button (📎)
-
-Image upload button (🖼️)
+Unified upload button (📎) for files and images
 
 “Send” button (Enter)
 
 Enhanced behaviors:
 
-Auto-mentor detection triggers before send (live classification).
+Auto-mentor detection triggers before send (live classification based on text or attached files).
 
-Pressing “Send” during image upload queues both text and file as one event.
+Attached files previewed inline below input with thumbnails/icons, names, sizes, and remove options.
+
+Pressing “Send” uploads files to Supabase Storage and queues both text and files as one message.
 
 5. Contextual Mentor Feedback
 5.1 Active Mentor Indicator
@@ -135,31 +135,27 @@ Type	Max Size	Example Use
 .csv	2 MB	Stock data uploads
 
 7.2 Upload Process
-User clicks the 📎 or 🖼️ icon.
+User clicks the 📎 icon to select files/images.
 
-Preview modal shows selected file.
+Selected files preview inline in input area (thumbnails for images, icons for docs, with name/size/remove).
 
-System detects type and triggers corresponding mentor:
+System detects file type on selection and auto-switches mentor if applicable (e.g., image → Chess, CSV → Stock).
 
-Chess board → Chess Mentor
+On send, files upload to Supabase Storage, metadata saved in DB.
 
-Bible text → Bible Mentor
-
-Stock CSV → Stock Mentor
-
-Uploaded file appears inline as a chat “card”:
+Uploaded files appear as inline “cards” in chat messages:
 
 yaml
 Copy code
 📁 Uploaded: board_position.jpg
-Detecting FEN...
+Name: board_position.jpg | Size: 1.2 MB
 → Mentor activated: Chess ♟️
 7.3 Security and Storage
-All uploads stored temporarily in Supabase Storage.
+All uploads stored in Supabase Storage bucket "uploads".
 
-Virus scan and MIME validation before processing.
+MIME validation on client; files sent with messages to API.
 
-Auto-cleanup after 48 hours (configurable).
+Auto-cleanup after 48 hours (configurable, not implemented yet).
 
 8. Interaction Design Patterns
 Interaction	Description
@@ -168,7 +164,7 @@ Quick Commands	/mentor to switch mentors, /help for commands list.
 Keyboard Shortcuts	Ctrl + K = open mentor selector, Ctrl + U = upload file.
 Progress Feedback	Animated dots during model or tool processing.
 Error Recovery	“Try again” option appears for failed API calls.
-Auto-scroll	Chat view scrolls smoothly to new messages.
+Auto-scroll	Chat view scrolls smoothly to new messages. (Implemented)
 Dark/Light Mode Toggle	User preference stored locally.
 
 9. Accessibility
@@ -227,7 +223,7 @@ Mentor Activation: Gradient background fade (0.4s).
 
 File Upload: Bounce-in preview card.
 
-Chat Bubbles: Scale-in from bottom (0.2s).
+Chat Bubbles: Scale-in from bottom (0.2s). (Implemented)
 
 API Call Progress: Animated “...” dots below mentor name.
 

@@ -33,6 +33,16 @@ const getConversationSchema = z.object({
 });
 
 const PREVIEW_MAX_LENGTH = 80;
+export const LLM_TIMEOUT_MS = Number(Deno.env.get("CHAT_LLM_TIMEOUT_MS")) || 15000;
+export const RATE_LIMIT_WINDOW_SECONDS = Number(Deno.env.get("CHAT_RATE_LIMIT_WINDOW_SECONDS")) || 60;
+export const RATE_LIMIT_MAX_REQUESTS = Number(Deno.env.get("CHAT_RATE_LIMIT_MAX_REQUESTS")) || 20;
+
+export class RateLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RateLimitError";
+  }
+}
 
 type ChatRequestPayload = z.infer<typeof chatRequestSchema>;
 
@@ -83,6 +93,10 @@ serve(async (req: Request) => {
       return respond({ error: true, message: "Invalid payload", details }, 400);
     }
 
+    if (error instanceof RateLimitError) {
+      return respond({ error: true, message: error.message }, 429);
+    }
+
     const message = error instanceof Error ? error.message : "Unexpected error";
     return respond({ error: true, message }, 500);
   }
@@ -102,6 +116,8 @@ async function handleChatRequest(
     payload.sessionId
   );
 
+  await enforceRateLimit(supabaseClient, conversationId);
+
   await insertMessage(supabaseClient, conversationId, "user", payload.message, mentorId, payload.files);
   await updateConversationSummary(
     supabaseClient,
@@ -111,7 +127,7 @@ async function handleChatRequest(
     conversationCreated
   );
 
-  const assistantReply = `This is a placeholder response until mentor intelligence is integrated. You said: ${payload.message}`;
+  const assistantReply = await generateAssistantReply(mentorId, payload.message);
 
   await insertMessage(supabaseClient, conversationId, "assistant", assistantReply, mentorId);
   await updateConversationSummary(supabaseClient, conversationId, assistantReply, "assistant", false);
@@ -286,7 +302,7 @@ function buildPreviewSnippet(content: string): string {
   if (normalized.length <= PREVIEW_MAX_LENGTH) {
     return normalized;
   }
-  return `${normalized.slice(0, PREVIEW_MAX_LENGTH - 1)}…`;
+  return `${normalized.slice(0, PREVIEW_MAX_LENGTH - 3)}...`;
 }
 
 async function fetchConversationMessages(
@@ -311,6 +327,109 @@ async function fetchConversationMessages(
     mentor: (row.metadata as any)?.mentor || "general",
     files: (row.metadata as any)?.files || []
   }));
+}
+
+export async function generateAssistantReply(mentorId: string, message: string): Promise<string> {
+  const apiKey = Deno.env.get("OPENROUTER_API_KEY") ?? Deno.env.get("OPENAI_API_KEY");
+  if (!apiKey) {
+    throw new Error("LLM provider key is not configured. Set OPENROUTER_API_KEY or OPENAI_API_KEY.");
+  }
+
+  const baseUrl = Deno.env.get("OPENROUTER_BASE_URL") ?? "https://openrouter.ai/api/v1";
+  const model = Deno.env.get("OPENROUTER_MODEL") ?? "openai/gpt-3.5-turbo";
+  const systemPrompt = buildSystemPrompt(mentorId);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+        "HTTP-Referer": Deno.env.get("OPENROUTER_SITE_URL") ?? "https://polychat.app",
+        "X-Title": Deno.env.get("OPENROUTER_APP_NAME") ?? "PolyChat"
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: message }
+        ],
+        temperature: 0.7
+      }),
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      const errorBody = await safeJson(response);
+      console.error("[chat] LLM call failed", response.status, errorBody);
+      throw new Error("Mentor is unavailable right now. Please try again in a moment.");
+    }
+
+    const data = await response.json();
+    const assistantMessage = data?.choices?.[0]?.message?.content;
+    if (typeof assistantMessage !== "string" || !assistantMessage.trim()) {
+      throw new Error("Mentor returned an empty response.");
+    }
+
+    return assistantMessage.trim();
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("Mentor is taking too long to respond. Please try again.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function buildSystemPrompt(mentorId: string): string {
+  switch (mentorId) {
+    case "bible":
+      return "You are the Bible Mentor. Answer using scripture references, gentle guidance, and historical context from the Bible.";
+    case "chess":
+      return "You are the Chess Mentor. Provide strategic advice with clear algebraic notation when relevant.";
+    case "stock":
+      return "You are the Stock Mentor. Offer educational market insights and risk-aware commentary. Do not give direct financial advice.";
+    case "math":
+      return "You are the Math Mentor. Explain concepts step by step and encourage understanding before providing solutions.";
+    default:
+      return "You are the General Mentor. Give helpful, concise answers with actionable next steps when possible.";
+  }
+}
+
+export async function enforceRateLimit(
+  supabaseClient: ReturnType<typeof createClient>,
+  conversationId: string
+) {
+  if (RATE_LIMIT_MAX_REQUESTS <= 0) return;
+
+  const sinceIso = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
+  const { count, error } = await supabaseClient
+    .from("messages")
+    .select("id", { head: true, count: "exact" })
+    .eq("conversation_id", conversationId)
+    .eq("role", "user")
+    .gte("created_at", sinceIso);
+
+  if (error) {
+    console.error("[chat] rate limit check failed", error);
+    return;
+  }
+
+  if (typeof count === "number" && count >= RATE_LIMIT_MAX_REQUESTS) {
+    throw new RateLimitError("Too many messages sent in a short period. Please wait and try again.");
+  }
+}
+
+async function safeJson(response: Response) {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
 }
 
 function respond(body: unknown, status = 200) {
