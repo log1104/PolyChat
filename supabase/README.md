@@ -8,6 +8,8 @@
  - Optionally set project secrets from GitHub Actions repo secrets
 
  See `docs/CI-DEPLOYMENT.md` for setup details.
+
+ Trigger: CI run
 # Supabase Setup
 
 1. Install the Supabase CLI and start the local stack:

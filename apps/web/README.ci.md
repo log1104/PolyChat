@@ -7,3 +7,5 @@ Build-time env required for the Vercel Action:
 - `VITE_SUPABASE_ANON_KEY` (from Supabase Settings → API)
 
 See `docs/CI-DEPLOYMENT.md` for details.
+
+Trigger: CI run
