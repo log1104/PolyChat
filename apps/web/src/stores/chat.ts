@@ -39,6 +39,8 @@ interface ChatState {
   conversationsLoading: boolean;
   apiOnline: boolean | null; // null = unknown, true = reachable, false = unreachable
   lastHealthCheckAt: string | null;
+  selectionMode: "auto" | "manual";
+  lockedMentorId: string | null;
 }
 
 interface ChatHistoryRow {
@@ -74,7 +76,9 @@ const apiBaseUrl = (
   import.meta.env.VITE_API_BASE_URL ?? defaultBaseUrl
 ).replace(/\/$/, "");
 const chatEndpoint = apiBaseUrl ? `${apiBaseUrl}/chat` : "/chat";
-const conversationsEndpoint = apiBaseUrl ? `${apiBaseUrl}/conversations` : "/conversations";
+const conversationsEndpoint = apiBaseUrl
+  ? `${apiBaseUrl}/conversations`
+  : "/conversations";
 const healthEndpoint = apiBaseUrl ? `${apiBaseUrl}/chat/health` : "/health";
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
 const SESSION_STORAGE_KEY = "polychat.sessionId";
@@ -93,6 +97,8 @@ export const useChatStore = defineStore("chat", {
     conversationsLoading: false,
     apiOnline: null,
     lastHealthCheckAt: null,
+    selectionMode: "auto",
+    lockedMentorId: null,
   }),
   getters: {
     orderedMessages: (state) =>
@@ -155,7 +161,12 @@ export const useChatStore = defineStore("chat", {
 
         if (type.startsWith("image/")) return "chess";
         if (name.endsWith(".csv") || type.includes("csv")) return "stock";
-        if (name.endsWith(".txt") || name.endsWith(".pdf") || name.endsWith(".docx")) return "bible";
+        if (
+          name.endsWith(".txt") ||
+          name.endsWith(".pdf") ||
+          name.endsWith(".docx")
+        )
+          return "bible";
       }
       return null;
     },
@@ -164,11 +175,17 @@ export const useChatStore = defineStore("chat", {
 
       this.error = null;
 
-  // Auto-route mentor based on content or uploaded files before sending
-  let routedMentor = this.classifyMentor(content);
-  const fileBased = (files && files.length) ? this.classifyFromFiles(files) : null;
-  if (fileBased) routedMentor = fileBased;
-  this.activeMentor = routedMentor ?? this.activeMentor ?? "general";
+      // Auto-route mentor based on content or uploaded files before sending, unless in manual mode
+      if (this.selectionMode === "auto") {
+        let routedMentor = this.classifyMentor(content);
+        const fileBased =
+          files && files.length ? this.classifyFromFiles(files) : null;
+        if (fileBased) routedMentor = fileBased;
+        this.activeMentor = routedMentor ?? this.activeMentor ?? "general";
+      } else {
+        // Manual mode: use locked mentor
+        this.activeMentor = this.lockedMentorId ?? "general";
+      }
 
       const now = new Date().toISOString();
 
@@ -209,8 +226,8 @@ export const useChatStore = defineStore("chat", {
           throw new Error("Unable to send message. Please try again.");
         }
 
-  const data = (await response.json()) as ChatApiResponse;
-  this.apiOnline = true;
+        const data = (await response.json()) as ChatApiResponse;
+        this.apiOnline = true;
         this.sessionId = data.conversationId;
         this.userId = data.userId;
         this.activeMentor = data.mentorId;
@@ -223,10 +240,10 @@ export const useChatStore = defineStore("chat", {
           mentor: data.mentorId,
         }));
 
-  this.persistSession();
-  // Refresh conversations so History reflects latest changes
-  // Safe to fire-and-forget; errors are non-fatal
-  this.loadConversations().catch(() => {});
+        this.persistSession();
+        // Refresh conversations so History reflects latest changes
+        // Safe to fire-and-forget; errors are non-fatal
+        this.loadConversations().catch(() => {});
       } catch (error) {
         this.error = error instanceof Error ? error.message : "Unknown error";
         this.apiOnline = false; // likely network/API down
@@ -242,7 +259,10 @@ export const useChatStore = defineStore("chat", {
       try {
         const res = await fetch(healthEndpoint, {
           headers: supabaseAnonKey
-            ? { apikey: supabaseAnonKey, Authorization: `Bearer ${supabaseAnonKey}` }
+            ? {
+                apikey: supabaseAnonKey,
+                Authorization: `Bearer ${supabaseAnonKey}`,
+              }
             : undefined,
         });
         this.apiOnline = res.ok;
@@ -261,11 +281,17 @@ export const useChatStore = defineStore("chat", {
       this.conversationsLoading = true;
       try {
         const params = new URLSearchParams({ userId: this.userId });
-        const response = await fetch(`${conversationsEndpoint}?${params.toString()}`, {
-          headers: supabaseAnonKey
-            ? { apikey: supabaseAnonKey, Authorization: `Bearer ${supabaseAnonKey}` }
-            : undefined,
-        });
+        const response = await fetch(
+          `${conversationsEndpoint}?${params.toString()}`,
+          {
+            headers: supabaseAnonKey
+              ? {
+                  apikey: supabaseAnonKey,
+                  Authorization: `Bearer ${supabaseAnonKey}`,
+                }
+              : undefined,
+          },
+        );
         if (!response.ok) throw new Error("Unable to load conversations");
         const data = (await response.json()) as ListConversationsResponse;
         this.conversations = data.conversations;
@@ -283,10 +309,16 @@ export const useChatStore = defineStore("chat", {
         headers: {
           "Content-Type": "application/json",
           ...(supabaseAnonKey
-            ? { apikey: supabaseAnonKey, Authorization: `Bearer ${supabaseAnonKey}` }
+            ? {
+                apikey: supabaseAnonKey,
+                Authorization: `Bearer ${supabaseAnonKey}`,
+              }
             : {}),
         },
-        body: JSON.stringify({ userId: this.userId, mentorId: mentorId ?? this.activeMentor }),
+        body: JSON.stringify({
+          userId: this.userId,
+          mentorId: mentorId ?? this.activeMentor,
+        }),
       });
       if (!response.ok) throw new Error("Unable to start new conversation");
       const conv = (await response.json()) as ConversationSummary;
@@ -327,8 +359,8 @@ export const useChatStore = defineStore("chat", {
           );
         }
 
-  const data = (await response.json()) as ConversationResponse;
-  this.apiOnline = true;
+        const data = (await response.json()) as ConversationResponse;
+        this.apiOnline = true;
         this.sessionId = data.conversationId;
         this.userId = data.userId;
         this.activeMentor = data.mentorId;
@@ -341,9 +373,9 @@ export const useChatStore = defineStore("chat", {
           mentor: data.mentorId,
         }));
 
-  this.persistSession();
-  // Keep conversation list in sync when switching
-  this.loadConversations().catch(() => {});
+        this.persistSession();
+        // Keep conversation list in sync when switching
+        this.loadConversations().catch(() => {});
       } catch (error) {
         this.error = error instanceof Error ? error.message : "Unknown error";
         this.apiOnline = false; // network/API issue
@@ -354,11 +386,18 @@ export const useChatStore = defineStore("chat", {
     },
     setMentor(mentorId: string) {
       this.activeMentor = mentorId;
+      this.selectionMode = "manual";
+      this.lockedMentorId = mentorId;
+    },
+    setAuto() {
+      this.selectionMode = "auto";
+      this.lockedMentorId = null;
     },
     resetChat() {
       this.messages = [];
       this.sessionId = null;
       this.error = null;
+      this.setAuto();
       this.clearPersistedSession({ clearUser: false });
     },
     initializeFromStorage() {

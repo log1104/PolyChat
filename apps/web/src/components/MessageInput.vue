@@ -22,7 +22,7 @@
         >
           <img
             v-if="file.type.startsWith('image/')"
-            :src="URL.createObjectURL(file)"
+            :src="getObjectURL(file)"
             class="h-8 w-8 rounded object-cover"
             alt="Preview"
           />
@@ -88,9 +88,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { ref, watch } from "vue";
 import { supabase } from "@/lib/supabase";
 import { mentorColorTokens } from "@/design/tokens";
+import type { ChatFile } from "@/stores/chat";
 
 const props = defineProps<{
   modelValue: string;
@@ -100,7 +101,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "update:modelValue", value: string): void;
-  (e: "submit", content: string, files: any[]): void;
+  (e: "submit", content: string, files: ChatFile[]): void;
 }>();
 
 const draft = ref(props.modelValue);
@@ -126,6 +127,16 @@ watch(
 
 watch(draft, (value) => emit("update:modelValue", value));
 
+const getObjectURL = (file: File) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (window as any).URL.createObjectURL(file);
+};
+
+const revokeObjectURL = (url: string) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).URL.revokeObjectURL(url);
+};
+
 const triggerUpload = () => fileInput.value?.click();
 
 const handleUploadSelect = (event: Event) => {
@@ -137,37 +148,37 @@ const handleUploadSelect = (event: Event) => {
 
 const removeFile = (index: number) => {
   const file = selectedFiles.value[index];
-  if (file.type.startsWith('image/')) {
-    URL.revokeObjectURL(URL.createObjectURL(file)); // Clean up
+  if (file && file.type.startsWith("image/")) {
+    revokeObjectURL(getObjectURL(file)); // Clean up
   }
   selectedFiles.value.splice(index, 1);
 };
 
 const getFileIcon = (type: string) => {
-  if (type.startsWith('image/')) return '🖼️';
-  if (type.includes('pdf')) return '📄';
-  if (type.includes('text') || type.includes('csv')) return '📄';
-  return '📎';
+  if (type.startsWith("image/")) return "🖼️";
+  if (type.includes("pdf")) return "📄";
+  if (type.includes("text") || type.includes("csv")) return "📄";
+  return "📎";
 };
 
 const formatFileSize = (bytes: number) => {
-  if (bytes === 0) return '0 Bytes';
+  if (bytes === 0) return "0 Bytes";
   const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const sizes = ["Bytes", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 };
 
 const emitSubmit = async () => {
   if (!draft.value.trim() && selectedFiles.value.length === 0) return;
 
   // Upload files to Supabase
-  const uploadedFiles = [];
+  const uploadedFiles: ChatFile[] = [];
   for (const file of selectedFiles.value) {
     try {
       const fileName = `${Date.now()}-${file.name}`;
       const { data, error } = await supabase.storage
-        .from('uploads')
+        .from("uploads")
         .upload(fileName, file);
 
       if (error) throw error;
@@ -178,7 +189,7 @@ const emitSubmit = async () => {
         size: file.size,
       });
     } catch (error) {
-      console.error('Upload failed:', error);
+      console.error("Upload failed:", error);
       // For now, skip failed uploads
     }
   }
@@ -186,17 +197,15 @@ const emitSubmit = async () => {
   emit("submit", draft.value, uploadedFiles);
   draft.value = "";
   // Clean up object URLs
-  selectedFiles.value.forEach(file => {
-    if (file.type.startsWith('image/')) {
-      URL.revokeObjectURL(URL.createObjectURL(file));
+  selectedFiles.value.forEach((file) => {
+    if (file.type.startsWith("image/")) {
+      revokeObjectURL(getObjectURL(file));
     }
   });
   selectedFiles.value = [];
   // Reset inputs
-  if (fileInput.value) fileInput.value.value = '';
+  if (fileInput.value) fileInput.value.value = "";
 };
-
-const disabled = computed(() => props.disabled ?? false);
 
 const handleEnter = (event: KeyboardEvent) => {
   if (!event.shiftKey) {

@@ -2,6 +2,7 @@ import { tailwindThemeExtension } from "../../design/tailwind.tokens";
 import type { Config } from "tailwindcss";
 
 export default {
+  darkMode: "class",
   content: ["./index.html", "./src/**/*.{vue,ts}"],
   safelist: [
     "bg-mentor-general",
@@ -26,6 +27,11 @@ export default {
       },
       boxShadow: {
         card: "0 1px 3px rgba(15, 23, 42, 0.12)",
+      },
+      zIndex: {
+        60: "60",
+        65: "65",
+        70: "70",
       },
     },
   },

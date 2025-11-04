@@ -13,7 +13,9 @@
         >
           <header
             class="mb-2 flex items-center justify-between text-xs uppercase tracking-wide opacity-85"
-            :class="message.role === 'user' ? 'text-slate-400' : 'text-white/90'"
+            :class="
+              message.role === 'user' ? 'text-slate-400' : 'text-white/90'
+            "
           >
             <span>{{
               message.role === "user" ? "You" : mentorLabel(message.mentor)
@@ -26,16 +28,23 @@
           >
             {{ message.content }}
           </p>
-          <div v-if="message.files && message.files.length" class="mt-2 space-y-2">
+          <div
+            v-if="message.files && message.files.length"
+            class="mt-2 space-y-2"
+          >
             <div
               v-for="file in message.files"
               :key="file.name"
               class="flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800/50 p-2 text-xs text-slate-300"
             >
-              <span class="text-lg">{{ file.type.startsWith('image/') ? '🖼️' : '📁' }}</span>
+              <span class="text-lg">{{
+                file.type.startsWith("image/") ? "🖼️" : "📁"
+              }}</span>
               <div class="flex-1">
                 <div class="font-medium">{{ file.name }}</div>
-                <div class="text-slate-500">{{ formatFileSize(file.size) }}</div>
+                <div class="text-slate-500">
+                  {{ formatFileSize(file.size) }}
+                </div>
               </div>
             </div>
           </div>
@@ -72,7 +81,7 @@ watch(
       messageContainer.value.scrollTop = messageContainer.value.scrollHeight;
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 const bubbleClass = (message: ChatMessage) => {
@@ -106,11 +115,11 @@ const formatTimestamp = (timestamp: string) => {
 };
 
 const formatFileSize = (bytes: number) => {
-  if (bytes === 0) return '0 Bytes';
+  if (bytes === 0) return "0 Bytes";
   const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const sizes = ["Bytes", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 };
 </script>
 
