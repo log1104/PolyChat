@@ -41,9 +41,13 @@ jobs:
       - name: Verify CLI auth
         run: supabase projects list || (echo "Supabase CLI auth failed. Ensure SUPABASE_ACCESS_TOKEN is set." && exit 1)
 
+      - name: Link Supabase project
+        if: env.SUPABASE_PROJECT_REF != ''
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
       - name: Push database changes to remote
         if: env.SUPABASE_PROJECT_REF != ''
-        run: supabase db push --project-ref "$SUPABASE_PROJECT_REF"
+        run: supabase db push
 
       - name: Set project secrets (if provided)
         if: env.SUPABASE_PROJECT_REF != ''
