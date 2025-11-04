@@ -1,0 +1,106 @@
+name: Deploy Supabase (DB + Functions)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'supabase/**'
+      - 'packages/**'
+      - 'apps/api/**'
+      - 'apps/web/src/stores/**'
+
+jobs:
+  deploy:
+    name: Deploy Supabase
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      # Optional provider secrets for setting project secrets via CLI (preferred to set in Dashboard):
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      OPENROUTER_BASE_URL: ${{ secrets.OPENROUTER_BASE_URL }}
+      OPENROUTER_MODEL: ${{ secrets.OPENROUTER_MODEL }}
+      OPENROUTER_SITE_URL: ${{ secrets.OPENROUTER_SITE_URL }}
+      OPENROUTER_APP_NAME: ${{ secrets.OPENROUTER_APP_NAME }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      SUPABASE_URL_SECRET: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY_SECRET: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      CHAT_LLM_TIMEOUT_MS: ${{ secrets.CHAT_LLM_TIMEOUT_MS }}
+      CHAT_RATE_LIMIT_WINDOW_SECONDS: ${{ secrets.CHAT_RATE_LIMIT_WINDOW_SECONDS }}
+      CHAT_RATE_LIMIT_MAX_REQUESTS: ${{ secrets.CHAT_RATE_LIMIT_MAX_REQUESTS }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Verify CLI auth
+        run: supabase projects list || (echo "Supabase CLI auth failed. Ensure SUPABASE_ACCESS_TOKEN is set." && exit 1)
+
+      - name: Push database changes to remote
+        if: env.SUPABASE_PROJECT_REF != ''
+        run: supabase db push --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Set project secrets (if provided)
+        if: env.SUPABASE_PROJECT_REF != ''
+        run: |
+          set -e
+          # Only set secrets that are present in repo secrets
+          function set_secret() {
+            key=$1
+            val=$2
+            if [ -n "$val" ]; then
+              echo "Setting secret $key"
+              supabase secrets set "$key=$val" --project-ref "$SUPABASE_PROJECT_REF"
+            else
+              echo "Skipping $key (not provided)"
+            fi
+          }
+
+          set_secret OPENROUTER_API_KEY "$OPENROUTER_API_KEY"
+          set_secret OPENROUTER_BASE_URL "$OPENROUTER_BASE_URL"
+          set_secret OPENROUTER_MODEL "$OPENROUTER_MODEL"
+          set_secret OPENROUTER_SITE_URL "$OPENROUTER_SITE_URL"
+          set_secret OPENROUTER_APP_NAME "$OPENROUTER_APP_NAME"
+          set_secret OPENAI_API_KEY "$OPENAI_API_KEY"
+          set_secret SUPABASE_URL "$SUPABASE_URL_SECRET"
+          set_secret SUPABASE_SERVICE_ROLE_KEY "$SUPABASE_SERVICE_ROLE_KEY_SECRET"
+          set_secret CHAT_LLM_TIMEOUT_MS "$CHAT_LLM_TIMEOUT_MS"
+          set_secret CHAT_RATE_LIMIT_WINDOW_SECONDS "$CHAT_RATE_LIMIT_WINDOW_SECONDS"
+          set_secret CHAT_RATE_LIMIT_MAX_REQUESTS "$CHAT_RATE_LIMIT_MAX_REQUESTS"
+
+      - name: Deploy all Edge Functions
+        if: env.SUPABASE_PROJECT_REF != ''
+        run: |
+          set -e
+          if [ ! -d "supabase/functions" ]; then
+            echo "No functions directory found; nothing to deploy."
+            exit 0
+          fi
+          deployed=0
+          for path in supabase/functions/*; do
+            if [ -d "$path" ]; then
+              fn=$(basename "$path")
+              echo "Deploying function: $fn"
+              supabase functions deploy "$fn" --project-ref "$SUPABASE_PROJECT_REF"
+              deployed=$((deployed+1))
+            fi
+          done
+          echo "Deployed $deployed function(s)."
+
+      - name: Smoke test health endpoint (chat)
+        if: env.SUPABASE_PROJECT_REF != ''
+        run: |
+          set -e
+          CHAT_URL="https://$SUPABASE_PROJECT_REF.functions.supabase.co/chat/health"
+          echo "GET $CHAT_URL"
+          http_code=$(curl -s -o /dev/null -w "%{http_code}" "$CHAT_URL")
+          echo "HTTP $http_code"
+          if [ "$http_code" != "200" ]; then
+            echo "Health check failed"
+            exit 1
+          fi
