@@ -17,6 +17,7 @@ jobs:
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       # Optional provider secrets for setting project secrets via CLI (preferred to set in Dashboard):
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       OPENROUTER_BASE_URL: ${{ secrets.OPENROUTER_BASE_URL }}
@@ -102,7 +103,15 @@ jobs:
           set -e
           CHAT_URL="https://$SUPABASE_PROJECT_REF.functions.supabase.co/chat/health"
           echo "GET $CHAT_URL"
-          http_code=$(curl -s -o /dev/null -w "%{http_code}" "$CHAT_URL")
+          if [ -n "$SUPABASE_ANON_KEY" ]; then
+            http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+              -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+              -H "apikey: $SUPABASE_ANON_KEY" \
+              "$CHAT_URL")
+          else
+            echo "SUPABASE_ANON_KEY not provided; trying unauthenticated request (may 401 if verify-jwt is enabled)."
+            http_code=$(curl -s -o /dev/null -w "%{http_code}" "$CHAT_URL")
+          fi
           echo "HTTP $http_code"
           if [ "$http_code" != "200" ]; then
             echo "Health check failed"
