@@ -10,6 +10,7 @@
  See `docs/CI-DEPLOYMENT.md` for setup details.
 
  Trigger: CI run
+ Trigger: CI run (anon key added)
 # Supabase Setup
 
 1. Install the Supabase CLI and start the local stack:
