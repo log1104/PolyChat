@@ -11,6 +11,7 @@
 
  Trigger: CI run
  Trigger: CI run (anon key added)
+ Trigger: storage bucket migration
 # Supabase Setup
 
 1. Install the Supabase CLI and start the local stack:
