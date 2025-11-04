@@ -27,8 +27,8 @@ const updateDraft = (value: string) => {
   draft.value = value;
 };
 
-const submitMessage = async (message: string) => {
-  await chatStore.sendMessage(message);
+const submitMessage = async (content: string, files: any[]) => {
+  await chatStore.sendMessage(content, files);
   draft.value = "";
 };
 

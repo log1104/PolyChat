@@ -41,7 +41,7 @@
       v-model="draft"
       :disabled="isSending"
       :mentor-id="activeMentor"
-      @submit="$emit('submit', draft)"
+      @submit="$emit('submit', $event.content, $event.files)"
     />
   </section>
 </template>
@@ -63,7 +63,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "update:draft", value: string): void;
-  (e: "submit", value: string): void;
+  (e: "submit", content: string, files: any[]): void;
   (e: "reset"): void;
 }>();
 

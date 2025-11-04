@@ -1,28 +1,46 @@
 <template>
-  <div class="flex flex-col gap-4 overflow-y-auto pr-3">
+  <div ref="messageContainer" class="flex flex-col gap-4 overflow-y-auto pr-3">
     <template v-if="messages.length">
-      <article
+      <Transition
         v-for="message in messages"
         :key="message.id"
-        class="max-w-3xl rounded-2xl p-4 shadow-card"
-        :class="bubbleClass(message)"
+        name="message"
+        appear
       >
-        <header
-          class="mb-2 flex items-center justify-between text-xs uppercase tracking-wide opacity-85"
-          :class="message.role === 'user' ? 'text-slate-400' : 'text-white/90'"
+        <article
+          class="max-w-3xl rounded-2xl p-4 shadow-card"
+          :class="bubbleClass(message)"
         >
-          <span>{{
-            message.role === "user" ? "You" : mentorLabel(message.mentor)
-          }}</span>
-          <time>{{ formatTimestamp(message.createdAt) }}</time>
-        </header>
-        <p
-          class="whitespace-pre-line text-sm leading-relaxed"
-          :class="message.role === 'user' ? 'text-slate-100' : 'text-white'"
-        >
-          {{ message.content }}
-        </p>
-      </article>
+          <header
+            class="mb-2 flex items-center justify-between text-xs uppercase tracking-wide opacity-85"
+            :class="message.role === 'user' ? 'text-slate-400' : 'text-white/90'"
+          >
+            <span>{{
+              message.role === "user" ? "You" : mentorLabel(message.mentor)
+            }}</span>
+            <time>{{ formatTimestamp(message.createdAt) }}</time>
+          </header>
+          <p
+            class="whitespace-pre-line text-sm leading-relaxed"
+            :class="message.role === 'user' ? 'text-slate-100' : 'text-white'"
+          >
+            {{ message.content }}
+          </p>
+          <div v-if="message.files && message.files.length" class="mt-2 space-y-2">
+            <div
+              v-for="file in message.files"
+              :key="file.name"
+              class="flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800/50 p-2 text-xs text-slate-300"
+            >
+              <span class="text-lg">{{ file.type.startsWith('image/') ? '🖼️' : '📁' }}</span>
+              <div class="flex-1">
+                <div class="font-medium">{{ file.name }}</div>
+                <div class="text-slate-500">{{ formatFileSize(file.size) }}</div>
+              </div>
+            </div>
+          </div>
+        </article>
+      </Transition>
     </template>
 
     <p v-else class="text-center text-sm text-slate-400">
@@ -34,13 +52,28 @@
 </template>
 
 <script setup lang="ts">
+import { nextTick, ref, watch } from "vue";
 import type { ChatMessage } from "../stores/chat";
 import { getMentorThemeClasses } from "@/design/tokens";
 
-defineProps<{
+const props = defineProps<{
   messages: ChatMessage[];
   activeMentor: string;
 }>();
+
+const messageContainer = ref<HTMLDivElement>();
+
+// Auto-scroll to bottom when messages change
+watch(
+  () => props.messages.length,
+  async () => {
+    await nextTick();
+    if (messageContainer.value) {
+      messageContainer.value.scrollTop = messageContainer.value.scrollHeight;
+    }
+  },
+  { immediate: true }
+);
 
 const bubbleClass = (message: ChatMessage) => {
   if (message.role === "user") {
@@ -71,4 +104,28 @@ const formatTimestamp = (timestamp: string) => {
     minute: "2-digit",
   });
 };
+
+const formatFileSize = (bytes: number) => {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
 </script>
+
+<style scoped>
+.message-enter-active {
+  transition: all 0.3s ease-out;
+}
+
+.message-enter-from {
+  opacity: 0;
+  transform: scale(0.9) translateY(10px);
+}
+
+.message-enter-to {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+}
+</style>
