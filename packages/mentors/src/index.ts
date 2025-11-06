@@ -1,6 +1,6 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { z } from 'zod';
+import fs from "node:fs";
+import path from "node:path";
+import { z } from "zod";
 
 const mentorSchema = z.object({
   id: z.string(),
@@ -8,8 +8,8 @@ const mentorSchema = z.object({
   styleGuidelines: z.array(z.string()),
   tooling: z.object({
     tools: z.array(z.string()),
-    fallback: z.string().nullable()
-  })
+    fallback: z.string().nullable(),
+  }),
 });
 
 const registrySchema = z.object({
@@ -17,21 +17,26 @@ const registrySchema = z.object({
     z.object({
       id: z.string(),
       promptFile: z.string(),
-      keywords: z.array(z.string())
-    })
-  )
+      keywords: z.array(z.string()),
+    }),
+  ),
 });
 
 export type MentorDefinition = z.infer<typeof mentorSchema>;
 export type MentorRegistry = z.infer<typeof registrySchema>;
 
-export function loadMentorRegistry(baseDir = path.resolve(process.cwd(), 'config', 'mentors')): MentorRegistry {
-  const registryPath = path.join(baseDir, 'index.json');
-  const data = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+export function loadMentorRegistry(
+  baseDir = path.resolve(process.cwd(), "config", "mentors"),
+): MentorRegistry {
+  const registryPath = path.join(baseDir, "index.json");
+  const data = JSON.parse(fs.readFileSync(registryPath, "utf8"));
   return registrySchema.parse(data);
 }
 
-export function loadMentorDefinition(mentorId: string, baseDir = path.resolve(process.cwd(), 'config', 'mentors')): MentorDefinition {
+export function loadMentorDefinition(
+  mentorId: string,
+  baseDir = path.resolve(process.cwd(), "config", "mentors"),
+): MentorDefinition {
   const registry = loadMentorRegistry(baseDir);
   const entry = registry.mentors.find((item) => item.id === mentorId);
 
@@ -40,7 +45,7 @@ export function loadMentorDefinition(mentorId: string, baseDir = path.resolve(pr
   }
 
   const promptPath = path.join(baseDir, entry.promptFile);
-  const data = JSON.parse(fs.readFileSync(promptPath, 'utf8'));
+  const data = JSON.parse(fs.readFileSync(promptPath, "utf8"));
 
   return mentorSchema.parse(data);
 }

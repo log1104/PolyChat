@@ -14,6 +14,10 @@ jobs:
   deploy:
     name: Deploy Supabase
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: supabase-deploy-${{ github.ref }}
+      cancel-in-progress: true
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
@@ -49,6 +53,29 @@ jobs:
       - name: Push database changes to remote
         if: env.SUPABASE_PROJECT_REF != ''
         run: supabase db push
+
+      - name: Verify 'uploads' bucket exists (optional)
+        if: env.SUPABASE_PROJECT_REF != ''
+        env:
+          SRK: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -e
+          if [ -z "$SRK" ]; then
+            echo "SUPABASE_SERVICE_ROLE_KEY not provided; skipping bucket verification."
+            exit 0
+          fi
+          BUCKET_URL="https://$SUPABASE_PROJECT_REF.supabase.co/storage/v1/bucket/uploads"
+          echo "Checking $BUCKET_URL"
+          code=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer $SRK" \
+            -H "apikey: $SRK" \
+            "$BUCKET_URL")
+          echo "HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "Uploads bucket not found (expected 200)."
+            exit 1
+          fi
+          echo "Uploads bucket exists."
 
       - name: Set project secrets (if provided)
         if: env.SUPABASE_PROJECT_REF != ''
@@ -104,13 +131,13 @@ jobs:
           CHAT_URL="https://$SUPABASE_PROJECT_REF.functions.supabase.co/chat/health"
           echo "GET $CHAT_URL"
           if [ -n "$SUPABASE_ANON_KEY" ]; then
-            http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+            http_code=$(curl --max-time 10 --connect-timeout 5 -s -o /dev/null -w "%{http_code}" \
               -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
               -H "apikey: $SUPABASE_ANON_KEY" \
               "$CHAT_URL")
           else
             echo "SUPABASE_ANON_KEY not provided; trying unauthenticated request (may 401 if verify-jwt is enabled)."
-            http_code=$(curl -s -o /dev/null -w "%{http_code}" "$CHAT_URL")
+            http_code=$(curl --max-time 10 --connect-timeout 5 -s -o /dev/null -w "%{http_code}" "$CHAT_URL")
           fi
           echo "HTTP $http_code"
           if [ "$http_code" != "200" ]; then

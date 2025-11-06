@@ -2,12 +2,14 @@
   <form
     class="flex items-end gap-3 rounded-3xl border border-slate-800/60 bg-slate-900/60 p-4 shadow-card"
   >
-    <label class="flex-1">
+    <label class="flex-1" for="message-input">
       <span class="sr-only">Message</span>
       <textarea
         v-model="draft"
         :disabled="disabled"
         rows="3"
+        id="message-input"
+        name="message"
         class="h-20 w-full resize-none rounded-2xl border border-slate-800/60 bg-slate-950/80 p-3 text-sm text-slate-100 placeholder-slate-400 shadow-inner focus:border-mentor focus:outline-none"
         placeholder="Ask a question or request help…"
         @keydown.enter.prevent="handleEnter"
@@ -48,6 +50,8 @@
       type="file"
       accept="image/*,.txt,.pdf,.docx,.csv"
       multiple
+      id="attachments-input"
+      name="attachments"
       class="hidden"
       @change="handleUploadSelect"
     />
@@ -92,6 +96,18 @@ import { ref, watch } from "vue";
 import { supabase } from "@/lib/supabase";
 import { mentorColorTokens } from "@/design/tokens";
 import type { ChatFile } from "@/stores/chat";
+import { extractPdfText } from "@/lib/pdf";
+
+const debugEnabled = () => {
+  try {
+    return (
+      typeof window !== "undefined" &&
+      window.localStorage.getItem("polychat.debug") === "1"
+    );
+  } catch {
+    return false;
+  }
+};
 
 const props = defineProps<{
   modelValue: string;
@@ -169,6 +185,73 @@ const formatFileSize = (bytes: number) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 };
 
+const readPlainText = async (file: File) => {
+  try {
+    return await file.text();
+  } catch {
+    return "";
+  }
+};
+
+const buildContentWithFileExtracts = async (base: string, files: File[]) => {
+  const wantsSummary = /\b(summar\w*|tl;dr)\b/i.test(base) || !base.trim();
+  if (!files.length) return base;
+
+  // Extract lightweight text for supported types
+  const snippets: string[] = [];
+  for (const f of files) {
+    try {
+      if (f.type.includes("pdf") || f.name.toLowerCase().endsWith(".pdf")) {
+        const text = await extractPdfText(f, { maxChars: 20000 });
+        if (debugEnabled()) {
+          console.debug("[polychat] extracted PDF text", {
+            name: f.name,
+            bytes: f.size,
+            chars: text?.length ?? 0,
+          });
+        }
+        if (text) snippets.push(`File: ${f.name}\n${text}`);
+      } else if (
+        f.type.includes("text") ||
+        f.type.includes("csv") ||
+        f.name.toLowerCase().endsWith(".txt") ||
+        f.name.toLowerCase().endsWith(".csv")
+      ) {
+        const text = await readPlainText(f);
+        if (debugEnabled()) {
+          console.debug("[polychat] extracted plain text", {
+            name: f.name,
+            bytes: f.size,
+            chars: text?.length ?? 0,
+          });
+        }
+        if (text) snippets.push(`File: ${f.name}\n${text}`);
+      }
+    } catch (e) {
+      if (debugEnabled()) {
+        console.warn("[polychat] failed to extract text from file", f.name, e);
+      }
+    }
+  }
+
+  if (!snippets.length) return base;
+
+  const combined = snippets.join("\n\n---\n\n");
+  const header = wantsSummary
+    ? "Please summarize the following content extracted from the attached files."
+    : "Attached file content is provided for context:";
+  const MAX_PROMPT = 24000; // keep payload within reasonable token budget
+  const payload = `${header}\n\n${combined}`.slice(0, MAX_PROMPT);
+  if (debugEnabled()) {
+    console.debug("[polychat] built summary payload", {
+      header,
+      combinedChars: combined.length,
+      payloadChars: payload.length,
+    });
+  }
+  return base.trim() ? `${base}\n\n${payload}` : payload;
+};
+
 const emitSubmit = async () => {
   if (!draft.value.trim() && selectedFiles.value.length === 0) return;
 
@@ -182,6 +265,14 @@ const emitSubmit = async () => {
         .upload(fileName, file);
 
       if (error) throw error;
+      if (debugEnabled()) {
+        console.debug("[polychat] uploaded file", {
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          path: data?.path,
+        });
+      }
       uploadedFiles.push({
         name: file.name,
         url: data.path,
@@ -189,12 +280,27 @@ const emitSubmit = async () => {
         size: file.size,
       });
     } catch (error) {
-      console.error("Upload failed:", error);
+      if (debugEnabled()) {
+        console.error("[polychat] upload failed:", error);
+      }
       // For now, skip failed uploads
     }
   }
 
-  emit("submit", draft.value, uploadedFiles);
+  // Build enhanced content including extracted file text when user asks to summarize or when message is empty
+  const contentWithExtracts = await buildContentWithFileExtracts(
+    draft.value,
+    selectedFiles.value,
+  );
+  if (debugEnabled()) {
+    console.debug("[polychat] sending message", {
+      baseChars: draft.value.length,
+      finalChars: contentWithExtracts.length,
+      files: uploadedFiles.map((f) => ({ name: f.name, size: f.size })),
+    });
+  }
+
+  emit("submit", contentWithExtracts, uploadedFiles);
   draft.value = "";
   // Clean up object URLs
   selectedFiles.value.forEach((file) => {
