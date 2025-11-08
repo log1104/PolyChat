@@ -9,20 +9,13 @@
         :is-manual="selectionMode === 'manual'"
       />
 
-      <div class="flex items-center gap-2 text-xs text-slate-400">
+      <div class="inline-flex items-center gap-2 text-xs text-slate-400">
         <span class="inline-flex items-center gap-1">
           <span
             class="h-2 w-2 rounded-full border border-slate-300 bg-emerald-400"
           ></span>
           {{ isSending ? "Thinking..." : "Ready" }}
         </span>
-        <button
-          type="button"
-          class="rounded-full border border-slate-700 px-3 py-1 text-slate-300 transition hover:border-mentor hover:text-white"
-          @click="$emit('reset')"
-        >
-          Clear chat
-        </button>
       </div>
     </header>
 
@@ -69,7 +62,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "update:draft", value: string): void;
   (e: "submit", content: string, files: ChatFile[]): void;
-  (e: "reset"): void;
 }>();
 
 const draft = computed({

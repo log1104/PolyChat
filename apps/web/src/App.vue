@@ -108,11 +108,6 @@ const submitMessage = async (content: string, files: ChatFile[]) => {
   draft.value = "";
 };
 
-const resetChat = () => {
-  chatStore.resetChat();
-  draft.value = "";
-};
-
 const startNewChat = async () => {
   if (!chatStore.messages.length) {
     return;
@@ -609,7 +604,6 @@ watch(systemPrefersDark, () => {
             :selection-mode="chatStore.selectionMode"
             @update:draft="updateDraft"
             @submit="submitMessage"
-            @reset="resetChat"
           />
         </section>
       </div>
