@@ -81,24 +81,6 @@
       📎
     </button>
 
-    <!-- LLM Model Selector -->
-    <div class="flex items-center gap-2">
-      <span class="text-slate-400 text-sm">🧠</span>
-      <select
-        v-model="selectedModel"
-        :disabled="disabled"
-        class="w-44 rounded-xl border border-slate-700 bg-slate-800/80 px-3 py-2 text-xs text-slate-100 focus:border-mentor focus:outline-none"
-      >
-        <option
-          v-for="option in modelOptions"
-          :key="option.value"
-          :value="option.value"
-        >
-          {{ option.label }}
-        </option>
-      </select>
-    </div>
-
     <button
       type="button"
       class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-mentor text-white shadow-card transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
@@ -155,20 +137,6 @@ const emit = defineEmits<{
 }>();
 
 const chatStore = useChatStore();
-
-const selectedModel = computed({
-  get: () => chatStore.selectedModel,
-  set: (value: string) => chatStore.setSelectedModel(value),
-});
-
-const modelOptions = [
-  { label: "GPT-4o Mini", value: "openai/gpt-4o-mini" },
-  { label: "Gemini 2.0 Flash Exp", value: "google/gemini-2.0-flash-exp" },
-  { label: "Gemini Flash", value: "google/gemini-flash" },
-  { label: "Grok Beta", value: "xai/grok-beta" },
-  { label: "MiniMax M2", value: "minimax/minimax-m2" },
-  { label: "DeepSeek Chat", value: "deepseek/deepseek-chat" },
-];
 
 interface SlashCommand {
   command: string;

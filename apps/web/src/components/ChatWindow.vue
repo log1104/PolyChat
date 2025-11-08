@@ -2,12 +2,23 @@
   <section
     class="flex h-full flex-col gap-4 rounded-3xl border border-slate-800/70 bg-slate-900/70 p-5 shadow-card"
   >
-    <header class="flex items-center justify-between">
-      <MentorBadge
-        :mentor-id="activeMentor"
-        :title="mentorTitle"
-        :is-manual="selectionMode === 'manual'"
-      />
+    <header class="flex items-center justify-between gap-4">
+      <label class="flex items-center gap-2 text-xs text-slate-300">
+        <span aria-hidden="true" class="text-sm">🧠</span>
+        <span class="sr-only">LLM model</span>
+        <select
+          v-model="selectedModel"
+          class="w-44 rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-2 text-xs text-slate-100 focus:border-mentor focus:outline-none"
+        >
+          <option
+            v-for="option in modelOptions"
+            :key="option.value"
+            :value="option.value"
+          >
+            {{ option.label }}
+          </option>
+        </select>
+      </label>
 
       <div class="inline-flex items-center gap-2 text-xs text-slate-400">
         <span class="inline-flex items-center gap-1">
@@ -46,7 +57,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { ChatMessage, ChatFile } from "../stores/chat";
-import MentorBadge from "./MentorBadge.vue";
+import { useChatStore } from "../stores/chat";
 import MessageList from "./MessageList.vue";
 import MessageInput from "./MessageInput.vue";
 
@@ -69,16 +80,19 @@ const draft = computed({
   set: (value: string) => emit("update:draft", value),
 });
 
-const mentorTitle = computed(() => {
-  switch (props.activeMentor) {
-    case "bible":
-      return "Bible Mentor";
-    case "chess":
-      return "Chess Mentor";
-    case "stock":
-      return "Stock Mentor";
-    default:
-      return "General Mentor";
-  }
+const chatStore = useChatStore();
+
+const selectedModel = computed({
+  get: () => chatStore.selectedModel,
+  set: (value: string) => chatStore.setSelectedModel(value),
 });
+
+const modelOptions = [
+  { label: "GPT-4o Mini", value: "openai/gpt-4o-mini" },
+  { label: "Gemini 2.0 Flash Exp", value: "google/gemini-2.0-flash-exp" },
+  { label: "Gemini Flash", value: "google/gemini-flash" },
+  { label: "Grok Beta", value: "xai/grok-beta" },
+  { label: "MiniMax M2", value: "minimax/minimax-m2" },
+  { label: "DeepSeek Chat", value: "deepseek/deepseek-chat" },
+];
 </script>
