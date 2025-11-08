@@ -2,7 +2,7 @@
   <form
     class="flex items-end gap-3 rounded-3xl border border-slate-800/60 bg-slate-900/60 p-4 shadow-card"
   >
-    <label class="flex-1" for="message-input">
+  <label class="relative flex-1" for="message-input">
       <span class="sr-only">Message</span>
       <textarea
         v-model="draft"
@@ -42,6 +42,21 @@
           </button>
         </div>
       </div>
+      <div
+        v-if="showSlashMenu && filteredSlashCommands.length"
+        class="absolute left-0 right-0 top-full z-20 mt-2 space-y-1 rounded-2xl border border-slate-700 bg-slate-900/95 p-2 shadow-lg"
+      >
+        <button
+          v-for="command in filteredSlashCommands"
+          :key="command.command"
+          type="button"
+          class="flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left text-xs text-slate-200 transition hover:bg-slate-800/80"
+          @click="applySlashCommand(command)"
+        >
+          <span class="font-semibold text-slate-100">{{ command.command }}</span>
+          <span class="text-slate-400">{{ command.description }}</span>
+        </button>
+      </div>
     </label>
 
     <!-- Single unified upload input/button (auto-detects file type) -->
@@ -65,6 +80,24 @@
       <span class="sr-only">Upload</span>
       📎
     </button>
+
+    <!-- LLM Model Selector -->
+    <div class="flex items-center gap-2">
+      <span class="text-slate-400 text-sm">🧠</span>
+      <select
+        v-model="selectedModel"
+        :disabled="disabled"
+        class="w-44 rounded-xl border border-slate-700 bg-slate-800/80 px-3 py-2 text-xs text-slate-100 focus:border-mentor focus:outline-none"
+      >
+        <option
+          v-for="option in modelOptions"
+          :key="option.value"
+          :value="option.value"
+        >
+          {{ option.label }}
+        </option>
+      </select>
+    </div>
 
     <button
       type="button"
@@ -92,11 +125,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { supabase } from "@/lib/supabase";
 import { mentorColorTokens } from "@/design/tokens";
 import type { ChatFile } from "@/stores/chat";
 import { extractPdfText } from "@/lib/pdf";
+import { useChatStore } from "@/stores/chat";
 
 const debugEnabled = () => {
   try {
@@ -120,9 +154,83 @@ const emit = defineEmits<{
   (e: "submit", content: string, files: ChatFile[]): void;
 }>();
 
+const chatStore = useChatStore();
+
+const selectedModel = computed({
+  get: () => chatStore.selectedModel,
+  set: (value: string) => chatStore.setSelectedModel(value),
+});
+
+const modelOptions = [
+  { label: "GPT-4o Mini", value: "openai/gpt-4o-mini" },
+  { label: "Gemini 2.0 Flash Exp", value: "google/gemini-2.0-flash-exp" },
+  { label: "Gemini Flash", value: "google/gemini-flash" },
+  { label: "Grok Beta", value: "xai/grok-beta" },
+  { label: "MiniMax M2", value: "minimax/minimax-m2" },
+  { label: "DeepSeek Chat", value: "deepseek/deepseek-chat" },
+];
+
+interface SlashCommand {
+  command: string;
+  mentorId: string;
+  description: string;
+}
+
+const slashCommands: SlashCommand[] = [
+  {
+    command: "/Bible",
+    mentorId: "bible",
+    description: "Scripture and faith guidance",
+  },
+  {
+    command: "/Chess",
+    mentorId: "chess",
+    description: "Strategy, tactics, and analysis",
+  },
+  {
+    command: "/Stock",
+    mentorId: "stock",
+    description: "Markets, investing, and trends",
+  },
+  {
+    command: "/General",
+    mentorId: "general",
+    description: "Everyday advice and planning",
+  },
+];
+
 const draft = ref(props.modelValue);
 const selectedFiles = ref<File[]>([]);
 const fileInput = ref<HTMLInputElement>();
+
+const showSlashMenu = computed(() => draft.value.startsWith("/"));
+
+const filteredSlashCommands = computed(() => {
+  if (!showSlashMenu.value) return [] as SlashCommand[];
+  const query = draft.value.slice(1).toLowerCase();
+  if (!query) return slashCommands;
+  return slashCommands.filter((command) =>
+    command.command.toLowerCase().includes(query),
+  );
+});
+
+const applySlashCommand = (command: SlashCommand) => {
+  chatStore.setMentor(command.mentorId);
+  draft.value = "";
+  selectedFiles.value = [];
+  if (fileInput.value) fileInput.value.value = "";
+};
+
+const handleSlashCommand = (): boolean => {
+  const trimmed = draft.value.trim().toLowerCase();
+  if (!trimmed.startsWith("/")) return false;
+  const match = slashCommands.find(
+    (command) => command.command.toLowerCase() === trimmed,
+  );
+  if (!match) return false;
+  applySlashCommand(match);
+  return true;
+};
 
 watch(
   () => props.modelValue,
@@ -253,6 +361,10 @@ const buildContentWithFileExtracts = async (base: string, files: File[]) => {
 };
 
 const emitSubmit = async () => {
+  if (handleSlashCommand()) {
+    return;
+  }
+
   if (!draft.value.trim() && selectedFiles.value.length === 0) return;
 
   // Upload files to Supabase

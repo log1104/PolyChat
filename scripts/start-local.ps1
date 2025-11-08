@@ -15,6 +15,15 @@ function Write-Warn {
     Write-Host "!!  $Message" -ForegroundColor Yellow
 }
 
+$shellCommand = Get-Command pwsh -ErrorAction SilentlyContinue
+if ($shellCommand) {
+    $shellPath = $shellCommand.Source
+    Write-Step "Using pwsh ($shellPath) for spawned terminals."
+} else {
+    $shellPath = (Get-Command powershell -ErrorAction Stop).Source
+    Write-Warn "PowerShell 7 (pwsh) not found on PATH. Falling back to Windows PowerShell.`n    Tip: run `powershell -ExecutionPolicy Bypass -File scripts/start-local.ps1 -WithFrontend`"
+}
+
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $repoRoot
 
@@ -79,13 +88,13 @@ if (-not $SkipSupabaseStart) {
 }
 
 Write-Step "Launching Edge Function: chat"
-$functionCommand = "cd `"$repoRoot`"; supabase functions serve chat --no-verify-jwt"
-Start-Process pwsh -ArgumentList "-NoExit", "-Command", $functionCommand | Out-Null
+$functionCommand = "cd `"$repoRoot`"; supabase functions serve chat --no-verify-jwt --env-file `"$envFile`""
+Start-Process $shellPath -ArgumentList "-NoExit", "-Command", $functionCommand | Out-Null
 
 if ($WithFrontend) {
     Write-Step "Launching frontend dev server on http://127.0.0.1:5173/"
     $frontendCommand = "cd `"$repoRoot`"; pnpm --filter @polychat/web dev -- --host 127.0.0.1"
-    Start-Process pwsh -ArgumentList "-NoExit", "-Command", $frontendCommand | Out-Null
+    Start-Process $shellPath -ArgumentList "-NoExit", "-Command", $frontendCommand | Out-Null
 }
 
 Write-Step "Finished. Check the opened terminals for live logs."

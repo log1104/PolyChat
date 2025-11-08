@@ -41,6 +41,7 @@ interface ChatState {
   lastHealthCheckAt: string | null;
   selectionMode: "auto" | "manual";
   lockedMentorId: string | null;
+  selectedModel: string;
 }
 
 interface ChatHistoryRow {
@@ -97,8 +98,9 @@ export const useChatStore = defineStore("chat", {
     conversationsLoading: false,
     apiOnline: null,
     lastHealthCheckAt: null,
-    selectionMode: "auto",
-    lockedMentorId: null,
+    selectionMode: "manual",
+    lockedMentorId: "general",
+    selectedModel: "openai/gpt-4o-mini",
   }),
   getters: {
     orderedMessages: (state) =>
@@ -219,6 +221,7 @@ export const useChatStore = defineStore("chat", {
             mentorId: this.activeMentor,
             sessionId: this.sessionId ?? undefined,
             userId: this.userId ?? undefined,
+            model: this.selectedModel,
           }),
         });
 
@@ -231,6 +234,7 @@ export const useChatStore = defineStore("chat", {
         this.sessionId = data.conversationId;
         this.userId = data.userId;
         this.activeMentor = data.mentorId;
+        this.lockedMentorId = data.mentorId;
 
         this.messages = data.history.map((item) => ({
           id: item.id,
@@ -325,6 +329,7 @@ export const useChatStore = defineStore("chat", {
       // Set active session and mentor
       this.sessionId = conv.id;
       this.activeMentor = conv.mentorId;
+  this.lockedMentorId = conv.mentorId;
       this.messages = [];
       // Update list and persist ids
       await this.loadConversations();
@@ -364,6 +369,7 @@ export const useChatStore = defineStore("chat", {
         this.sessionId = data.conversationId;
         this.userId = data.userId;
         this.activeMentor = data.mentorId;
+  this.lockedMentorId = data.mentorId;
 
         this.messages = data.history.map((item) => ({
           id: item.id,
@@ -393,11 +399,14 @@ export const useChatStore = defineStore("chat", {
       this.selectionMode = "auto";
       this.lockedMentorId = null;
     },
+    setSelectedModel(model: string) {
+      this.selectedModel = model;
+    },
     resetChat() {
       this.messages = [];
       this.sessionId = null;
       this.error = null;
-      this.setAuto();
+      this.setMentor("general");
       this.clearPersistedSession({ clearUser: false });
     },
     initializeFromStorage() {
