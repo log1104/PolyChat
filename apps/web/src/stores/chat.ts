@@ -304,10 +304,6 @@ export const useChatStore = defineStore("chat", {
       }
     },
     async startNewConversation(mentorId?: string) {
-      if (!this.userId) {
-        // If we don't have a user yet, trigger a lightweight chat to create one implicitly
-        // But to avoid sending a real message, we create a placeholder conversation via API when possible.
-      }
       const response = await fetch(conversationsEndpoint, {
         method: "POST",
         headers: {
@@ -320,7 +316,7 @@ export const useChatStore = defineStore("chat", {
             : {}),
         },
         body: JSON.stringify({
-          userId: this.userId,
+          userId: this.userId ?? undefined,
           mentorId: mentorId ?? this.activeMentor,
         }),
       });
@@ -329,7 +325,8 @@ export const useChatStore = defineStore("chat", {
       // Set active session and mentor
       this.sessionId = conv.id;
       this.activeMentor = conv.mentorId;
-  this.lockedMentorId = conv.mentorId;
+      this.lockedMentorId = conv.mentorId;
+      this.userId = conv.userId;
       this.messages = [];
       // Update list and persist ids
       await this.loadConversations();
@@ -449,6 +446,36 @@ export const useChatStore = defineStore("chat", {
       if (options?.clearUser !== false) {
         window.localStorage.removeItem(USER_STORAGE_KEY);
       }
+    },
+    async deleteConversation(conversationId: string) {
+      if (!conversationId) return;
+      const response = await fetch(conversationsEndpoint, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          ...(supabaseAnonKey
+            ? {
+                apikey: supabaseAnonKey,
+                Authorization: `Bearer ${supabaseAnonKey}`,
+              }
+            : {}),
+        },
+        body: JSON.stringify({
+          userId: this.userId,
+          conversationId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Unable to delete conversation");
+      }
+
+      if (this.sessionId === conversationId) {
+        this.resetChat();
+      }
+
+      await this.loadConversations();
+      this.persistSession();
     },
   },
 });

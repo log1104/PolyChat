@@ -11,7 +11,7 @@ declare const Deno: {
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS"
 };
 
 const listConversationsSchema = z.object({
@@ -19,8 +19,13 @@ const listConversationsSchema = z.object({
 });
 
 const createConversationSchema = z.object({
-  userId: z.string(),
+  userId: z.string().optional(),
   mentorId: z.string().optional()
+});
+
+const deleteConversationSchema = z.object({
+  userId: z.string(),
+  conversationId: z.string()
 });
 
 const PREVIEW_MAX_LENGTH = 80;
@@ -53,8 +58,15 @@ serve(async (req: Request) => {
 
     if (req.method === "POST") {
       const payload = createConversationSchema.parse(await req.json());
-      const result = await createConversation(supabaseClient, payload.userId, payload.mentorId);
+      const userId = await ensureUser(supabaseClient, payload.userId);
+      const result = await createConversation(supabaseClient, userId, payload.mentorId);
       return respond(result, 200);
+    }
+
+    if (req.method === "DELETE") {
+      const payload = deleteConversationSchema.parse(await req.json());
+      await deleteConversation(supabaseClient, payload.userId, payload.conversationId);
+      return respond({ success: true }, 200);
     }
 
     return respond({ error: true, message: "Method not allowed" }, 405);
@@ -149,4 +161,58 @@ function toPreview(value: string | null): string | undefined {
     return normalized;
   }
   return `${normalized.slice(0, PREVIEW_MAX_LENGTH - 1)}…`;
+}
+
+async function deleteConversation(
+  supabaseClient: ReturnType<typeof createClient>,
+  userId: string,
+  conversationId: string
+) {
+  const { data: existing, error: fetchError } = await supabaseClient
+    .from("conversations")
+    .select("id")
+    .eq("id", conversationId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (fetchError) {
+    throw new Error(`Failed to verify conversation ownership: ${fetchError.message}`);
+  }
+
+  if (!existing) {
+    throw new Error("Conversation not found or does not belong to the user");
+  }
+
+  const { error: deleteError } = await supabaseClient
+    .from("conversations")
+    .delete()
+    .eq("id", conversationId)
+    .eq("user_id", userId);
+
+  if (deleteError) {
+    throw new Error(`Failed to delete conversation: ${deleteError.message}`);
+  }
+}
+
+async function ensureUser(
+  supabaseClient: ReturnType<typeof createClient>,
+  userId?: string
+): Promise<string> {
+  if (userId) {
+    return userId;
+  }
+
+  const email = `guest-${crypto.randomUUID()}@polychat.local`;
+
+  const { data, error } = await supabaseClient
+    .from("users")
+    .insert({ email })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    throw new Error(`Failed to create user: ${error?.message ?? "Unknown error"}`);
+  }
+
+  return data.id as string;
 }

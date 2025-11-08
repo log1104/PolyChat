@@ -21,7 +21,7 @@ if ($shellCommand) {
     Write-Step "Using pwsh ($shellPath) for spawned terminals."
 } else {
     $shellPath = (Get-Command powershell -ErrorAction Stop).Source
-    Write-Warn "PowerShell 7 (pwsh) not found on PATH. Falling back to Windows PowerShell.`n    Tip: run `powershell -ExecutionPolicy Bypass -File scripts/start-local.ps1 -WithFrontend`"
+    Write-Warn "PowerShell 7 (pwsh) not found on PATH. Falling back to Windows PowerShell.`n    Tip: run ``powershell -ExecutionPolicy Bypass -File scripts/start-local.ps1 -WithFrontend``"
 }
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
@@ -88,7 +88,7 @@ if (-not $SkipSupabaseStart) {
 }
 
 Write-Step "Launching Edge Function: chat"
-$functionCommand = "cd `"$repoRoot`"; supabase functions serve chat --no-verify-jwt --env-file `"$envFile`""
+$functionCommand = "cd `"$repoRoot`"; supabase functions serve chat --no-verify-jwt --watch --env-file `"$envFile`""
 Start-Process $shellPath -ArgumentList "-NoExit", "-Command", $functionCommand | Out-Null
 
 if ($WithFrontend) {

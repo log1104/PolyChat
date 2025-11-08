@@ -14,6 +14,7 @@ const messages = computed(() => chatStore.orderedMessages);
 const activeMentor = computed(() => chatStore.activeMentor);
 const isSending = computed(() => chatStore.isSending);
 const error = computed(() => chatStore.error);
+const activeConversationId = computed(() => chatStore.sessionId);
 
 const mentorOptions = [
   { id: "general", label: "General Mentor", description: "Default" },
@@ -25,6 +26,8 @@ const mentorOptions = [
 
 // Collapsible left sidebar (Gemini-style): collapsed = icon-only rail, expanded = wide with labels
 const isSidebarExpanded = ref(false);
+const isCreatingConversation = ref(false);
+const deletingConversationId = ref<string | null>(null);
 
 const toggleSidebar = () => {
   isSidebarExpanded.value = !isSidebarExpanded.value;
@@ -108,6 +111,45 @@ const submitMessage = async (content: string, files: ChatFile[]) => {
 const resetChat = () => {
   chatStore.resetChat();
   draft.value = "";
+};
+
+const startNewChat = async () => {
+  if (!chatStore.messages.length) {
+    return;
+  }
+  if (isCreatingConversation.value) return;
+  isCreatingConversation.value = true;
+  try {
+    await chatStore.startNewConversation(chatStore.lockedMentorId ?? chatStore.activeMentor);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unable to start a new chat.";
+    chatStore.error = message;
+  } finally {
+    isCreatingConversation.value = false;
+  }
+};
+
+const requestDeleteConversation = async (conversationId: string) => {
+  if (deletingConversationId.value) return;
+  const confirmed =
+    typeof window === "undefined"
+      ? true
+      : window.confirm("Delete this conversation? This cannot be undone.");
+
+  if (!confirmed) {
+    return;
+  }
+
+  deletingConversationId.value = conversationId;
+
+  try {
+    await chatStore.deleteConversation(conversationId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unable to delete conversation.";
+    chatStore.error = message;
+  } finally {
+    deletingConversationId.value = null;
+  }
 };
 
 onMounted(() => {
@@ -210,6 +252,38 @@ watch(systemPrefersDark, () => {
           <span aria-hidden="true" class="text-xl leading-none">☰</span>
         </button>
 
+        <button
+          type="button"
+          class="mb-3 inline-flex items-center rounded-xl border transition focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+          :class="[
+            isSidebarExpanded
+              ? 'w-full justify-start gap-2 px-3 py-2'
+              : 'h-9 w-9 justify-center',
+            isCreatingConversation
+              ? 'cursor-wait border-slate-700 bg-slate-900/60 text-slate-400'
+              : 'border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500 hover:bg-slate-800',
+          ]"
+          :disabled="isCreatingConversation"
+          :aria-busy="isCreatingConversation"
+          :title="isSidebarExpanded ? undefined : 'New chat'"
+          aria-label="Start a new chat"
+          @click="startNewChat"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            class="h-4 w-4 flex-none"
+            aria-hidden="true"
+          >
+            <path
+              d="M4 17.5V20h2.5L17.81 8.69l-2.5-2.5L4 17.5zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 2.5 2.5 1.83-1.83z"
+              fill="currentColor"
+            />
+          </svg>
+          <span v-if="isSidebarExpanded" class="text-sm font-medium">New chat</span>
+        </button>
+
         <nav class="flex flex-col gap-2" aria-label="Icon rail">
           <!-- Mentors -->
           <button
@@ -306,18 +380,61 @@ watch(systemPrefersDark, () => {
                 No conversations yet
               </li>
               <li v-for="conv in chatStore.conversations" :key="conv.id">
-                <button
-                  type="button"
-                  class="group flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-[13px] text-slate-300 hover:bg-slate-800/60 hover:text-white"
-                  @click="chatStore.selectConversation(conv.id)"
-                >
-                  <span class="line-clamp-1">{{
-                    conv.preview || conv.title || "New chat"
-                  }}</span>
-                  <span class="ml-2 shrink-0 text-[10px] text-slate-500">{{
-                    new Date(conv.createdAt).toLocaleDateString()
-                  }}</span>
-                </button>
+                <div class="group flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    class="flex min-w-0 flex-1 flex-col rounded-lg px-2 py-1.5 text-left transition"
+                    :class="
+                      activeConversationId === conv.id
+                        ? 'bg-slate-800/80 text-white'
+                        : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
+                    "
+                    :aria-pressed="activeConversationId === conv.id"
+                    @click="chatStore.selectConversation(conv.id)"
+                  >
+                    <span class="line-clamp-1 text-[13px] font-medium">{{
+                      conv.preview || conv.title || 'New chat'
+                    }}</span>
+                    <span class="text-[10px] text-slate-500">{{
+                      new Date(conv.createdAt).toLocaleDateString()
+                    }}</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-xs text-slate-500 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/60"
+                    :class="[
+                      activeConversationId === conv.id
+                        ? 'opacity-100 text-slate-200'
+                        : 'opacity-0 group-hover:opacity-100',
+                      deletingConversationId === conv.id
+                        ? 'cursor-wait text-slate-400'
+                        : 'hover:border-red-500 hover:text-red-400',
+                    ]"
+                    :disabled="deletingConversationId === conv.id"
+                    :aria-busy="deletingConversationId === conv.id"
+                    :title="deletingConversationId === conv.id ? 'Deleting conversation…' : 'Delete conversation'"
+                    aria-label="Delete conversation"
+                    @click.stop="requestDeleteConversation(conv.id)"
+                  >
+                    <svg
+                      v-if="deletingConversationId !== conv.id"
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      class="h-3.5 w-3.5"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M6 7h12m-9 0V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-8 0v12a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V7H6z"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                    <span v-else class="text-[10px]">…</span>
+                  </button>
+                </div>
               </li>
             </ul>
           </div>
