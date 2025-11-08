@@ -16,14 +16,6 @@ const isSending = computed(() => chatStore.isSending);
 const error = computed(() => chatStore.error);
 const activeConversationId = computed(() => chatStore.sessionId);
 
-const mentorOptions = [
-  { id: "general", label: "General Mentor", description: "Default" },
-  { id: "bible", label: "Bible Mentor", description: "Scripture" },
-  { id: "chess", label: "Chess Mentor", description: "Strategy" },
-  { id: "stock", label: "Stock Mentor", description: "Markets" },
-  { id: "math", label: "Math Mentor", description: "Academics" },
-] as const;
-
 // Collapsible left sidebar (Gemini-style): collapsed = icon-only rail, expanded = wide with labels
 const isSidebarExpanded = ref(false);
 const isCreatingConversation = ref(false);
@@ -31,15 +23,6 @@ const deletingConversationId = ref<string | null>(null);
 
 const toggleSidebar = () => {
   isSidebarExpanded.value = !isSidebarExpanded.value;
-};
-
-const selectMentor = (mentorId: string) => {
-  if (mentorId === activeMentor.value) return;
-  chatStore.setMentor(mentorId);
-};
-
-const setAuto = () => {
-  chatStore.setAuto();
 };
 
 const isSettingsOpen = ref(false);
@@ -279,83 +262,8 @@ watch(systemPrefersDark, () => {
           <span v-if="isSidebarExpanded" class="text-sm font-medium">New chat</span>
         </button>
 
-        <nav class="flex flex-col gap-2" aria-label="Icon rail">
-          <!-- Mentors -->
-          <button
-            type="button"
-            class="group inline-flex items-center rounded-xl border border-slate-800 text-slate-300 transition hover:border-slate-700 hover:text-white"
-            :class="
-              isSidebarExpanded
-                ? 'gap-2.5 px-2.5 py-1.5 w-full'
-                : 'h-9 w-9 justify-center'
-            "
-            aria-label="Mentors"
-          >
-            <!-- user-group icon -->
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              class="h-4 w-4 flex-none"
-            >
-              <path
-                d="M16 14a4 4 0 1 1 4 4M4 18a4 4 0 1 1 8 0M12 9a4 4 0 1 1 8 0M2 10a4 4 0 1 0 8 0"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-              />
-            </svg>
-            <span
-              v-if="isSidebarExpanded"
-              class="truncate text-sm text-slate-200"
-              >Mentors</span
-            >
-          </button>
+        <nav class="flex flex-col gap-2" aria-label="Sidebar navigation">
           <div v-if="isSidebarExpanded" class="w-full">
-            <ul class="space-y-1">
-              <li>
-                <button
-                  type="button"
-                  class="flex w-full items-center justify-between rounded-lg border px-2.5 py-1.5 text-left text-sm transition"
-                  :class="
-                    chatStore.selectionMode === 'auto'
-                      ? 'border-slate-500 bg-slate-800/70 text-white'
-                      : 'border-transparent text-slate-300 hover:border-slate-700 hover:bg-slate-800/60 hover:text-white'
-                  "
-                  :aria-pressed="chatStore.selectionMode === 'auto'"
-                  @click="setAuto"
-                >
-                  <span class="font-medium">Auto</span>
-                  <span class="text-xs text-slate-500">Smart routing</span>
-                </button>
-              </li>
-              <li v-for="mentor in mentorOptions" :key="mentor.id">
-                <button
-                  type="button"
-                  class="flex w-full items-center justify-between rounded-lg border px-2.5 py-1.5 text-left text-sm transition"
-                  :class="
-                    mentor.id === activeMentor &&
-                    chatStore.selectionMode === 'manual'
-                      ? 'border-slate-500 bg-slate-800/70 text-white'
-                      : 'border-transparent text-slate-300 hover:border-slate-700 hover:bg-slate-800/60 hover:text-white'
-                  "
-                  :aria-pressed="
-                    mentor.id === activeMentor &&
-                    chatStore.selectionMode === 'manual'
-                  "
-                  @click="selectMentor(mentor.id)"
-                >
-                  <span class="font-medium">{{ mentor.label }}</span>
-                  <span class="text-xs text-slate-500">{{
-                    mentor.description
-                  }}</span>
-                </button>
-              </li>
-            </ul>
-          </div>
-
-          <!-- Recent conversations list (visible when expanded) -->
-          <div v-if="isSidebarExpanded" class="mt-4 w-full">
             <div
               class="px-1.5 pb-1 text-[11px] font-medium uppercase tracking-wide text-slate-400"
             >
@@ -432,6 +340,13 @@ watch(systemPrefersDark, () => {
                 </div>
               </li>
             </ul>
+          </div>
+
+          <div
+            v-else
+            class="flex flex-1 items-center justify-center text-[10px] uppercase tracking-wide text-slate-600"
+          >
+            Recent
           </div>
         </nav>
 
