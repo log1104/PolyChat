@@ -24,7 +24,8 @@ const chatRequestSchema = z.object({
   })).optional(),
   mentorId: z.string().optional(),
   sessionId: z.string().optional(),
-  userId: z.string().optional()
+  userId: z.string().optional(),
+  systemPrompt: z.string().optional()
 });
 
 const getConversationSchema = z.object({
@@ -106,7 +107,8 @@ async function handleChatRequest(
   supabaseClient: ReturnType<typeof createClient>,
   payload: ChatRequestPayload
 ) {
-  const mentorId = payload.mentorId ?? "bible";
+  const mentorId = payload.mentorId ?? "general";
+  const systemPrompt = payload.systemPrompt?.trim() || buildSystemPrompt(mentorId);
 
   const userId = await ensureUser(supabaseClient, payload.userId);
   const { id: conversationId, created: conversationCreated } = await ensureConversation(
@@ -127,7 +129,11 @@ async function handleChatRequest(
     conversationCreated
   );
 
-  const assistantReply = await generateAssistantReply(mentorId, payload.message);
+  const assistantReply = await generateAssistantReply(
+    mentorId,
+    payload.message,
+    systemPrompt,
+  );
 
   await insertMessage(supabaseClient, conversationId, "assistant", assistantReply, mentorId);
   await updateConversationSummary(supabaseClient, conversationId, assistantReply, "assistant", false);
@@ -329,7 +335,11 @@ async function fetchConversationMessages(
   }));
 }
 
-export async function generateAssistantReply(mentorId: string, message: string): Promise<string> {
+export async function generateAssistantReply(
+  mentorId: string,
+  message: string,
+  systemPrompt?: string,
+): Promise<string> {
   const apiKey = Deno.env.get("OPENROUTER_API_KEY") ?? Deno.env.get("OPENAI_API_KEY");
   if (!apiKey) {
     throw new Error("LLM provider key is not configured. Set OPENROUTER_API_KEY or OPENAI_API_KEY.");
@@ -337,7 +347,7 @@ export async function generateAssistantReply(mentorId: string, message: string):
 
   const baseUrl = Deno.env.get("OPENROUTER_BASE_URL") ?? "https://openrouter.ai/api/v1";
   const model = Deno.env.get("OPENROUTER_MODEL") ?? "openai/gpt-3.5-turbo";
-  const systemPrompt = buildSystemPrompt(mentorId);
+  const effectivePrompt = systemPrompt?.trim() || buildSystemPrompt(mentorId);
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
@@ -354,7 +364,7 @@ export async function generateAssistantReply(mentorId: string, message: string):
       body: JSON.stringify({
         model,
         messages: [
-          { role: "system", content: systemPrompt },
+          { role: "system", content: effectivePrompt },
           { role: "user", content: message }
         ],
         temperature: 0.7

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ChatWindow from "./components/ChatWindow.vue";
+import MentorConfigPanel from "./components/MentorConfigPanel.vue";
 import { useChatStore } from "./stores/chat";
 import type { ChatFile } from "./stores/chat";
 
@@ -264,6 +265,10 @@ watch(systemPrefersDark, () => {
 
         <nav class="flex flex-col gap-2" aria-label="Sidebar navigation">
           <div v-if="isSidebarExpanded" class="w-full">
+            <MentorConfigPanel
+              v-if="activeMentor"
+              :mentor-id="activeMentor"
+            />
             <div
               class="px-1.5 pb-1 text-[11px] font-medium uppercase tracking-wide text-slate-400"
             >

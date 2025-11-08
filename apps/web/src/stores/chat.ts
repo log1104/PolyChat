@@ -1,4 +1,10 @@
 ﻿import { defineStore } from "pinia";
+import {
+  getAllMentorConfigs,
+  getBaseMentorConfig,
+  hasMentor,
+  type MentorConfig,
+} from "../lib/mentorConfigs";
 
 export type ChatRole = "user" | "assistant" | "system";
 
@@ -42,6 +48,7 @@ interface ChatState {
   selectionMode: "auto" | "manual";
   lockedMentorId: string | null;
   selectedModel: string;
+  mentorConfigs: Record<string, MentorConfig>;
 }
 
 interface ChatHistoryRow {
@@ -70,6 +77,12 @@ interface ListConversationsResponse {
   conversations: ConversationSummary[];
 }
 
+interface MentorConfigOverride {
+  systemPrompt?: string;
+}
+
+type MentorOverrides = Record<string, MentorConfigOverride>;
+
 const defaultBaseUrl = import.meta.env.DEV
   ? "http://127.0.0.1:54321/functions/v1"
   : "";
@@ -84,12 +97,14 @@ const healthEndpoint = apiBaseUrl ? `${apiBaseUrl}/chat/health` : "/health";
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
 const SESSION_STORAGE_KEY = "polychat.sessionId";
 const USER_STORAGE_KEY = "polychat.userId";
+const MENTOR_OVERRIDES_STORAGE_KEY = "polychat.mentorOverrides";
+const DEFAULT_MENTOR_ID = "general";
 
 export const useChatStore = defineStore("chat", {
   state: (): ChatState => ({
     messages: [],
     // default mentor is general; auto-routing can switch this per message
-    activeMentor: "general",
+  activeMentor: DEFAULT_MENTOR_ID,
     isSending: false,
     sessionId: null,
     userId: null,
@@ -99,16 +114,94 @@ export const useChatStore = defineStore("chat", {
     apiOnline: null,
     lastHealthCheckAt: null,
     selectionMode: "manual",
-    lockedMentorId: "general",
+  lockedMentorId: DEFAULT_MENTOR_ID,
     selectedModel: "openai/gpt-4o-mini",
+    mentorConfigs: {},
   }),
   getters: {
     orderedMessages: (state) =>
       [...state.messages].sort(
         (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt),
       ),
+    mentorConfig: (state) => (mentorId: string): MentorConfig => {
+      const config = state.mentorConfigs[mentorId];
+      if (config) return config;
+      return getBaseMentorConfig(mentorId);
+    },
   },
   actions: {
+    ensureMentorConfigsLoaded() {
+      if (Object.keys(this.mentorConfigs).length > 0) {
+        return;
+      }
+
+      const baseConfigs = getAllMentorConfigs();
+      const overrides = this.readMentorOverrides();
+
+      this.mentorConfigs = baseConfigs.reduce<Record<string, MentorConfig>>(
+        (acc, config) => {
+          const override = overrides[config.id];
+          acc[config.id] = {
+            ...config,
+            ...(override?.systemPrompt ? { systemPrompt: override.systemPrompt } : {}),
+          };
+          return acc;
+        },
+        {},
+      );
+    },
+    readMentorOverrides(): MentorOverrides {
+      if (typeof window === "undefined") {
+        return {};
+      }
+      try {
+        const raw = window.localStorage.getItem(MENTOR_OVERRIDES_STORAGE_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          return parsed as MentorOverrides;
+        }
+      } catch (error) {
+        console.warn("Failed to parse mentor overrides", error);
+      }
+      return {};
+    },
+    writeMentorOverrides(overrides: MentorOverrides) {
+      if (typeof window === "undefined") {
+        return;
+      }
+      window.localStorage.setItem(
+        MENTOR_OVERRIDES_STORAGE_KEY,
+        JSON.stringify(overrides),
+      );
+    },
+    updateMentorSystemPrompt(mentorId: string, systemPrompt: string) {
+      this.ensureMentorConfigsLoaded();
+      const trimmed = systemPrompt.trim();
+      const current = this.mentorConfigs[mentorId] ?? getBaseMentorConfig(mentorId);
+      this.mentorConfigs = {
+        ...this.mentorConfigs,
+        [mentorId]: { ...current, systemPrompt: trimmed },
+      };
+
+      const overrides = this.readMentorOverrides();
+      overrides[mentorId] = { systemPrompt: trimmed };
+      this.writeMentorOverrides(overrides);
+    },
+    resetMentorSystemPrompt(mentorId: string) {
+      this.ensureMentorConfigsLoaded();
+      const baseConfig = getBaseMentorConfig(mentorId);
+      this.mentorConfigs = {
+        ...this.mentorConfigs,
+        [mentorId]: baseConfig,
+      };
+
+      const overrides = this.readMentorOverrides();
+      if (overrides[mentorId]) {
+        delete overrides[mentorId];
+        this.writeMentorOverrides(overrides);
+      }
+    },
     /**
      * Lightweight, client-side mentor classifier.
      * Returns one of: 'bible' | 'chess' | 'stock' | 'general'.
@@ -149,7 +242,7 @@ export const useChatStore = defineStore("chat", {
         return "stock";
       }
 
-      return "general";
+  return DEFAULT_MENTOR_ID;
     },
     /**
      * Classify mentor based on uploaded files (mime or extension).
@@ -183,10 +276,13 @@ export const useChatStore = defineStore("chat", {
         const fileBased =
           files && files.length ? this.classifyFromFiles(files) : null;
         if (fileBased) routedMentor = fileBased;
-        this.activeMentor = routedMentor ?? this.activeMentor ?? "general";
+        const safeMentor = hasMentor(routedMentor)
+          ? routedMentor
+          : DEFAULT_MENTOR_ID;
+        this.activeMentor = safeMentor ?? this.activeMentor ?? DEFAULT_MENTOR_ID;
       } else {
         // Manual mode: use locked mentor
-        this.activeMentor = this.lockedMentorId ?? "general";
+  this.activeMentor = this.lockedMentorId ?? DEFAULT_MENTOR_ID;
       }
 
       const now = new Date().toISOString();
@@ -204,6 +300,12 @@ export const useChatStore = defineStore("chat", {
       this.isSending = true;
 
       try {
+        this.ensureMentorConfigsLoaded();
+        const mentorConfig =
+          this.mentorConfigs[this.activeMentor] ??
+          getBaseMentorConfig(this.activeMentor);
+        const systemPrompt = mentorConfig.systemPrompt;
+
         const response = await fetch(chatEndpoint, {
           method: "POST",
           headers: {
@@ -222,6 +324,7 @@ export const useChatStore = defineStore("chat", {
             sessionId: this.sessionId ?? undefined,
             userId: this.userId ?? undefined,
             model: this.selectedModel,
+            systemPrompt,
           }),
         });
 
@@ -304,6 +407,14 @@ export const useChatStore = defineStore("chat", {
       }
     },
     async startNewConversation(mentorId?: string) {
+      this.ensureMentorConfigsLoaded();
+      const resolvedMentorId = mentorId ?? this.activeMentor ?? DEFAULT_MENTOR_ID;
+      const safeMentorId = hasMentor(resolvedMentorId)
+        ? resolvedMentorId
+        : DEFAULT_MENTOR_ID;
+      const mentorConfig =
+        this.mentorConfigs[safeMentorId] ?? getBaseMentorConfig(safeMentorId);
+
       const response = await fetch(conversationsEndpoint, {
         method: "POST",
         headers: {
@@ -317,7 +428,8 @@ export const useChatStore = defineStore("chat", {
         },
         body: JSON.stringify({
           userId: this.userId ?? undefined,
-          mentorId: mentorId ?? this.activeMentor,
+          mentorId: safeMentorId,
+          systemPrompt: mentorConfig.systemPrompt,
         }),
       });
       if (!response.ok) throw new Error("Unable to start new conversation");
@@ -388,9 +500,11 @@ export const useChatStore = defineStore("chat", {
       }
     },
     setMentor(mentorId: string) {
-      this.activeMentor = mentorId;
+      this.ensureMentorConfigsLoaded();
+      const safeMentorId = hasMentor(mentorId) ? mentorId : DEFAULT_MENTOR_ID;
+      this.activeMentor = safeMentorId;
       this.selectionMode = "manual";
-      this.lockedMentorId = mentorId;
+      this.lockedMentorId = safeMentorId;
     },
     setAuto() {
       this.selectionMode = "auto";
@@ -403,11 +517,13 @@ export const useChatStore = defineStore("chat", {
       this.messages = [];
       this.sessionId = null;
       this.error = null;
-      this.setMentor("general");
+  this.setMentor(DEFAULT_MENTOR_ID);
       this.clearPersistedSession({ clearUser: false });
     },
     initializeFromStorage() {
       if (typeof window === "undefined") return;
+
+      this.ensureMentorConfigsLoaded();
 
       const storedSession = window.localStorage.getItem(SESSION_STORAGE_KEY);
       const storedUser = window.localStorage.getItem(USER_STORAGE_KEY);
