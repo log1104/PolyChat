@@ -26,19 +26,8 @@ const deletingConversationId = ref<string | null>(null);
 
 const isGeneralSettingsOpen = ref(false);
 const isSettingsOpen = ref(false);
-const settingsSections = [
-  {
-    id: "mentor",
-    label: "Mentor Settings",
-    icon: "💡",
-    description: "Persona, runtime, tools",
-  },
-  { id: "notifications", label: "Notifications", icon: "🔔", description: "Coming soon" },
-  { id: "privacy", label: "Data controls", icon: "🛡", description: "Coming soon" },
-  { id: "account", label: "Account", icon: "👤", description: "Coming soon" },
-] as const;
-type SettingsSectionId = (typeof settingsSections)[number]["id"];
-const activeSettingsSection = ref<SettingsSectionId>("mentor");
+const mentorSettingsId = ref<string>("");
+
 const theme = ref<"light" | "dark" | "system">("system");
 const systemPrefersDark = ref(false);
 let systemMediaQuery: MediaQueryList | null = null;
@@ -48,8 +37,41 @@ if (typeof window !== "undefined") {
   systemPrefersDark.value = systemMediaQuery.matches;
 }
 
-const openSettings = (section: SettingsSectionId = "mentor") => {
-  activeSettingsSection.value = section;
+const mentorOptions = computed(() => {
+  return Object.values(chatStore.mentorConfigs).map((mentor) => ({
+    id: mentor.id,
+    label: mentor.id.replace(/(^|[-_])(\w)/g, (_, __, letter) =>
+      letter.toUpperCase(),
+    ),
+    prompt: mentor.systemPrompt ?? "",
+  }));
+});
+
+const currentMentorOption = computed(() =>
+  mentorOptions.value.find((mentor) => mentor.id === mentorSettingsId.value),
+);
+
+const mentorPersonaDraft = ref("");
+
+const ensureMentorSelection = () => {
+  if (!mentorSettingsId.value) {
+    mentorSettingsId.value =
+      chatStore.activeMentor ||
+      mentorOptions.value[0]?.id ||
+      "";
+  }
+  const active = mentorOptions.value.find(
+    (mentor) => mentor.id === mentorSettingsId.value,
+  );
+  if (!active && mentorOptions.value.length > 0) {
+    mentorSettingsId.value = mentorOptions.value[0].id;
+  }
+};
+
+const openSettings = () => {
+  chatStore.ensureMentorConfigsLoaded();
+  ensureMentorSelection();
+  mentorPersonaDraft.value = currentMentorOption.value?.prompt ?? "";
   isSettingsOpen.value = true;
 };
 
@@ -206,12 +228,26 @@ watch(systemPrefersDark, () => {
 });
 
 watch(
-  () => isSettingsOpen.value,
-  (open) => {
-    if (!open) {
-      activeSettingsSection.value = "mentor";
+  () => mentorSettingsId.value,
+  (id) => {
+    const active = mentorOptions.value.find((mentor) => mentor.id === id);
+    if (active) {
+      mentorPersonaDraft.value = active.prompt;
     }
   },
+  { immediate: true },
+);
+
+watch(
+  mentorOptions,
+  () => {
+    if (!mentorOptions.value.find((mentor) => mentor.id === mentorSettingsId.value)) {
+      mentorSettingsId.value = "";
+    }
+    ensureMentorSelection();
+    mentorPersonaDraft.value = currentMentorOption.value?.prompt ?? "";
+  },
+  { immediate: true },
 );
 </script>
 
@@ -280,7 +316,7 @@ watch(
           <button
             type="button"
             class="flex w-full items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 transition hover:border-slate-400 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            @click="openSettings('mentor')"
+            @click="openSettings"
             aria-label="Open mentor settings"
           >
             <span aria-hidden="true" class="text-lg">💡</span>
@@ -375,63 +411,64 @@ watch(
           <aside class="flex w-64 flex-col border-r border-white/10">
             <div class="flex items-center justify-between px-4 py-3">
               <p class="text-sm font-semibold uppercase tracking-wide text-slate-300">
-                Settings
+                Mentors
               </p>
               <button
                 type="button"
                 class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/20 text-lg"
                 @click="closeSettings"
-                aria-label="Close settings"
+                aria-label="Close mentor settings"
               >
                 ✕
               </button>
             </div>
             <nav class="flex-1 space-y-1 overflow-y-auto px-2 pb-4">
               <button
-                v-for="section in settingsSections"
-                :key="section.id"
+                v-for="mentor in mentorOptions"
+                :key="mentor.id"
                 type="button"
                 class="flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left transition"
                 :class="
-                  activeSettingsSection === section.id
+                  mentorSettingsId === mentor.id
                     ? 'bg-white/10 text-white'
                     : 'text-slate-400 hover:bg-white/5'
                 "
-                @click="activeSettingsSection = section.id"
+                @click="mentorSettingsId = mentor.id"
               >
-                <span aria-hidden="true" class="text-lg">{{ section.icon }}</span>
+                <span aria-hidden="true" class="text-lg">💡</span>
                 <div class="flex-1">
-                  <p class="text-sm font-semibold">{{ section.label }}</p>
-                  <p class="text-xs">{{ section.description }}</p>
+                  <p class="text-sm font-semibold">{{ mentor.label }}</p>
+                  <p class="text-xs">Persona, runtime, tools</p>
                 </div>
               </button>
             </nav>
           </aside>
           <section class="flex-1 overflow-y-auto p-8 space-y-6">
-            <div v-if="activeSettingsSection === 'mentor'" class="space-y-5">
+            <div v-if="currentMentorOption" class="space-y-5">
               <div>
-                <h2 class="text-2xl font-semibold text-white">Mentor Settings</h2>
+                <h2 class="text-2xl font-semibold text-white">
+                  {{ currentMentorOption.label }}
+                </h2>
                 <p class="text-sm text-slate-400">
-                  Configure persona, runtime, and future tool integrations.
+                  Persona and upcoming runtime/tools configuration.
                 </p>
               </div>
-              <ul class="space-y-3 text-sm text-slate-300">
-                <li>• Persona: system prompt per mentor (already editable on the left).</li>
-                <li>• Runtime: timeouts, max tokens, retries, rate limits (coming soon).</li>
-                <li>• Tools: per-mentor integrations like Stockfish or finance data.</li>
-              </ul>
-              <p class="text-xs text-slate-500">
-                Full editor will live here once the config API lands. For now, use the sidebar panel for persona updates.
-              </p>
+              <div class="rounded-2xl border border-white/10 bg-white/5 p-5">
+                <h3 class="text-sm font-semibold text-white">Persona (System Prompt)</h3>
+                <textarea
+                  v-model="mentorPersonaDraft"
+                  class="mt-3 h-48 w-full resize-none rounded-2xl border border-white/20 bg-slate-900/60 p-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-white/30"
+                ></textarea>
+                <p class="mt-2 text-xs text-slate-500">
+                  Editing is draft-only for now. Persistent save will arrive with the config API.
+                </p>
+              </div>
+              <div class="rounded-2xl border border-dashed border-white/15 bg-white/5 p-5 text-sm text-slate-400">
+                Runtime & tools placeholders will appear here once configurable.
+              </div>
             </div>
             <div v-else class="space-y-4 text-sm text-slate-300">
-              <h2 class="text-2xl font-semibold text-white">
-                {{ settingsSections.find((s) => s.id === activeSettingsSection)?.label }}
-                (Coming soon)
-              </h2>
-              <p class="text-slate-400">
-                This section isn’t ready yet. We’ll surface additional preferences here in a future release.
-              </p>
+              <p>Select a mentor from the list to view settings.</p>
             </div>
           </section>
         </div>
