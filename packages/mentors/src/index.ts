@@ -1,16 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-
-const mentorSchema = z.object({
-  id: z.string(),
-  systemPrompt: z.string(),
-  styleGuidelines: z.array(z.string()),
-  tooling: z.object({
-    tools: z.array(z.string()),
-    fallback: z.string().nullable(),
-  }),
-});
+import {
+  mentorConfigCoreSchema,
+  mentorConfigEnvelopeSchema,
+  normalizeLegacyConfig,
+  type MentorConfigCore,
+} from "./schema";
 
 const registrySchema = z.object({
   mentors: z.array(
@@ -22,8 +18,8 @@ const registrySchema = z.object({
   ),
 });
 
-export type MentorDefinition = z.infer<typeof mentorSchema>;
 export type MentorRegistry = z.infer<typeof registrySchema>;
+export type MentorConfig = MentorConfigCore;
 
 export function loadMentorRegistry(
   baseDir = path.resolve(process.cwd(), "config", "mentors"),
@@ -36,7 +32,7 @@ export function loadMentorRegistry(
 export function loadMentorDefinition(
   mentorId: string,
   baseDir = path.resolve(process.cwd(), "config", "mentors"),
-): MentorDefinition {
+): MentorConfigCore {
   const registry = loadMentorRegistry(baseDir);
   const entry = registry.mentors.find((item) => item.id === mentorId);
 
@@ -47,5 +43,16 @@ export function loadMentorDefinition(
   const promptPath = path.join(baseDir, entry.promptFile);
   const data = JSON.parse(fs.readFileSync(promptPath, "utf8"));
 
-  return mentorSchema.parse(data);
+  // Accept legacy files and normalize to new core schema
+  const candidate = "systemPrompt" in data ? normalizeLegacyConfig(data) : data;
+  return mentorConfigCoreSchema.parse(candidate);
+}
+
+// Convenience to shape an empty envelope from disk data
+export function toEnvelope(config: MentorConfigCore) {
+  return mentorConfigEnvelopeSchema.parse({
+    id: config.id,
+    draft: config,
+    published: config,
+  });
 }

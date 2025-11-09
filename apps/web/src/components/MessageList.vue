@@ -28,6 +28,12 @@
           >
             {{ message.content }}
           </p>
+          <p
+            v-if="message.role === 'assistant' && message.model"
+            class="mt-2 text-xs text-slate-200/70"
+          >
+            Reply generated with {{ modelLabel(message.model) }}.
+          </p>
           <div
             v-if="message.files && message.files.length"
             class="mt-2 space-y-2"
@@ -64,6 +70,7 @@
 import { nextTick, ref, watch } from "vue";
 import type { ChatMessage } from "../stores/chat";
 import { getMentorThemeClasses } from "@/design/tokens";
+import { getChatModelLabel } from "../lib/chatModels";
 
 const props = defineProps<{
   messages: ChatMessage[];
@@ -106,6 +113,8 @@ const mentorLabel = (mentorId: string) => {
       return "General Mentor";
   }
 };
+
+const modelLabel = (modelId: string) => getChatModelLabel(modelId);
 
 const formatTimestamp = (timestamp: string) => {
   return new Date(timestamp).toLocaleTimeString([], {

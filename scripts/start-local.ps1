@@ -24,6 +24,29 @@ if ($shellCommand) {
     Write-Warn "PowerShell 7 (pwsh) not found on PATH. Falling back to Windows PowerShell.`n    Tip: run ``powershell -ExecutionPolicy Bypass -File scripts/start-local.ps1 -WithFrontend``"
 }
 
+function Import-DotEnv {
+    param([string]$Path)
+
+    if (-not (Test-Path $Path)) {
+        return
+    }
+
+    Write-Step "Loading environment variables from $Path"
+    Get-Content $Path | ForEach-Object {
+        if (-not $_) { return }
+        if ($_.StartsWith("#")) { return }
+        $parts = $_ -split "=", 2
+        if ($parts.Length -ne 2) { return }
+        $name = $parts[0].Trim()
+    if (-not $name) { return }
+    $value = $parts[1].Trim()
+    if ($value.StartsWith('"') -and $value.EndsWith('"') -and $value.Length -ge 2) {
+        $value = $value.Substring(1, $value.Length - 2)
+    }
+        [Environment]::SetEnvironmentVariable($name, $value, "Process")
+    }
+}
+
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $repoRoot
 
@@ -40,20 +63,10 @@ if (-not (Test-Path $envFile)) {
     throw "Missing .env file at $envFile."
 }
 
-Write-Step "Loading environment variables from .env"
-Get-Content $envFile | ForEach-Object {
-    if (-not $_) { return }
-    if ($_.StartsWith("#")) { return }
-    $parts = $_ -split "=", 2
-    if ($parts.Length -ne 2) { return }
-    $name = $parts[0].Trim()
-    if (-not $name) { return }
-    $value = $parts[1].Trim()
-    if ($value.StartsWith('"') -and $value.EndsWith('"') -and $value.Length -ge 2) {
-        $value = $value.Substring(1, $value.Length - 2)
-    }
-    [Environment]::SetEnvironmentVariable($name, $value, "Process")
-}
+Import-DotEnv -Path $envFile
+
+$apiEnvFile = Join-Path $repoRoot "apps/api/.env"
+Import-DotEnv -Path $apiEnvFile
 
 if (-not $env:OPENROUTER_API_KEY -and -not $env:OPENAI_API_KEY) {
     Write-Warn "OPENROUTER_API_KEY or OPENAI_API_KEY is not set. The chat function will return 500 responses."

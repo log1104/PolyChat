@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.203.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
+import { DEFAULT_CHAT_MODEL } from "../../../shared/chatModel.ts";
 
 declare const Deno: {
   env: {
@@ -25,7 +26,8 @@ const chatRequestSchema = z.object({
   mentorId: z.string().optional(),
   sessionId: z.string().optional(),
   userId: z.string().optional(),
-  systemPrompt: z.string().optional()
+  systemPrompt: z.string().optional(),
+  model: z.string().optional()
 });
 
 const getConversationSchema = z.object({
@@ -46,6 +48,7 @@ export class RateLimitError extends Error {
 }
 
 type ChatRequestPayload = z.infer<typeof chatRequestSchema>;
+type AnySupabaseClient = SupabaseClient<any, any, any>;
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -104,11 +107,13 @@ serve(async (req: Request) => {
 });
 
 async function handleChatRequest(
-  supabaseClient: ReturnType<typeof createClient>,
+  supabaseClient: AnySupabaseClient,
   payload: ChatRequestPayload
 ) {
   const mentorId = payload.mentorId ?? "general";
   const systemPrompt = payload.systemPrompt?.trim() || buildSystemPrompt(mentorId);
+  const requestedModel = payload.model?.trim();
+  const model = requestedModel || DEFAULT_CHAT_MODEL; // Shared with UI selector (see shared/chatModel.ts).
 
   const userId = await ensureUser(supabaseClient, payload.userId);
   const { id: conversationId, created: conversationCreated } = await ensureConversation(
@@ -120,7 +125,16 @@ async function handleChatRequest(
 
   await enforceRateLimit(supabaseClient, conversationId);
 
-  await insertMessage(supabaseClient, conversationId, "user", payload.message, mentorId, payload.files);
+  await insertMessage(
+    supabaseClient,
+    conversationId,
+    "user",
+    payload.message,
+    {
+      mentorId,
+      files: payload.files
+    }
+  );
   await updateConversationSummary(
     supabaseClient,
     conversationId,
@@ -133,9 +147,19 @@ async function handleChatRequest(
     mentorId,
     payload.message,
     systemPrompt,
+    model,
   );
 
-  await insertMessage(supabaseClient, conversationId, "assistant", assistantReply, mentorId);
+  await insertMessage(
+    supabaseClient,
+    conversationId,
+    "assistant",
+    assistantReply,
+    {
+      mentorId,
+      model
+    }
+  );
   await updateConversationSummary(supabaseClient, conversationId, assistantReply, "assistant", false);
 
   const history = await fetchConversationMessages(supabaseClient, conversationId);
@@ -150,7 +174,7 @@ async function handleChatRequest(
 }
 
 async function getConversation(
-  supabaseClient: ReturnType<typeof createClient>,
+  supabaseClient: AnySupabaseClient,
   conversationId: string,
   userId?: string
 ) {
@@ -183,7 +207,7 @@ async function getConversation(
 }
 
 async function ensureUser(
-  supabaseClient: ReturnType<typeof createClient>,
+  supabaseClient: AnySupabaseClient,
   existingUserId?: string
 ): Promise<string> {
   if (existingUserId) {
@@ -206,7 +230,7 @@ async function ensureUser(
 }
 
 async function ensureConversation(
-  supabaseClient: ReturnType<typeof createClient>,
+  supabaseClient: AnySupabaseClient,
   userId: string,
   mentorId: string,
   existingConversationId?: string
@@ -249,19 +273,33 @@ async function ensureConversation(
   return { id: data.id as string, created: true };
 }
 
+interface MessageMetadataOptions {
+  mentorId: string;
+  files?: { name: string; url: string; type: string; size: number }[];
+  model?: string;
+}
+
 async function insertMessage(
-  supabaseClient: ReturnType<typeof createClient>,
+  supabaseClient: AnySupabaseClient,
   conversationId: string,
   role: "user" | "assistant",
   content: string,
-  mentorId: string,
-  files?: { name: string; url: string; type: string; size: number }[]
+  options: MessageMetadataOptions
 ) {
+  const metadata: Record<string, unknown> = {
+    mentor: options.mentorId,
+    files: options.files ?? []
+  };
+
+  if (options.model) {
+    metadata.model = options.model;
+  }
+
   const { error } = await supabaseClient.from("messages").insert({
     conversation_id: conversationId,
     role,
     content,
-    metadata: { mentor: mentorId, files: files || [] }
+    metadata
   });
 
   if (error) {
@@ -270,7 +308,7 @@ async function insertMessage(
 }
 
 async function updateConversationSummary(
-  supabaseClient: ReturnType<typeof createClient>,
+  supabaseClient: AnySupabaseClient,
   conversationId: string,
   content: string,
   role: "user" | "assistant",
@@ -312,7 +350,7 @@ function buildPreviewSnippet(content: string): string {
 }
 
 async function fetchConversationMessages(
-  supabaseClient: ReturnType<typeof createClient>,
+  supabaseClient: AnySupabaseClient,
   conversationId: string
 ) {
   const { data, error } = await supabaseClient
@@ -331,14 +369,16 @@ async function fetchConversationMessages(
     content: row.content as string,
     createdAt: row.created_at as string,
     mentor: (row.metadata as any)?.mentor || "general",
-    files: (row.metadata as any)?.files || []
+    files: (row.metadata as any)?.files || [],
+    model: (row.metadata as any)?.model || undefined
   }));
 }
 
 export async function generateAssistantReply(
   mentorId: string,
   message: string,
-  systemPrompt?: string,
+  systemPrompt: string | undefined,
+  model: string,
 ): Promise<string> {
   const apiKey = Deno.env.get("OPENROUTER_API_KEY") ?? Deno.env.get("OPENAI_API_KEY");
   if (!apiKey) {
@@ -346,7 +386,7 @@ export async function generateAssistantReply(
   }
 
   const baseUrl = Deno.env.get("OPENROUTER_BASE_URL") ?? "https://openrouter.ai/api/v1";
-  const model = Deno.env.get("OPENROUTER_MODEL") ?? "openai/gpt-3.5-turbo";
+  const effectiveModel = model?.trim() || DEFAULT_CHAT_MODEL;
   const effectivePrompt = systemPrompt?.trim() || buildSystemPrompt(mentorId);
 
   const controller = new AbortController();
@@ -362,7 +402,7 @@ export async function generateAssistantReply(
         "X-Title": Deno.env.get("OPENROUTER_APP_NAME") ?? "PolyChat"
       },
       body: JSON.stringify({
-        model,
+        model: effectiveModel,
         messages: [
           { role: "system", content: effectivePrompt },
           { role: "user", content: message }
@@ -411,7 +451,7 @@ function buildSystemPrompt(mentorId: string): string {
 }
 
 export async function enforceRateLimit(
-  supabaseClient: ReturnType<typeof createClient>,
+  supabaseClient: AnySupabaseClient,
   conversationId: string
 ) {
   if (RATE_LIMIT_MAX_REQUESTS <= 0) return;

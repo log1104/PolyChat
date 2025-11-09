@@ -24,13 +24,14 @@ Workflows
    - SUPABASE_PROJECT_REF: Your project ref (e.g., vtblibcltcvfkpdxowzw)
 
    Optional repo secrets (only if you prefer setting project secrets via CI):
-   - OPENROUTER_API_KEY, OPENROUTER_BASE_URL, OPENROUTER_MODEL, OPENROUTER_SITE_URL, OPENROUTER_APP_NAME
+   - OPENROUTER_API_KEY, OPENROUTER_BASE_URL, OPENROUTER_SITE_URL, OPENROUTER_APP_NAME
    - OPENAI_API_KEY (alternative to OpenRouter)
    - SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (for functions; can also be set in Supabase Settings → API)
    - CHAT_LLM_TIMEOUT_MS, CHAT_RATE_LIMIT_WINDOW_SECONDS, CHAT_RATE_LIMIT_MAX_REQUESTS
 
    Notes:
    - You can also set secrets directly in the Supabase Dashboard instead of providing them via GitHub.
+   - The default chat model is driven by the UI selector (`shared/chatModel.ts`). Set env overrides only if you need different API hosts/keys.
 
 2) .github/workflows/vercel-deploy.yml
    Triggers on push to main (web-related paths) or manual dispatch.

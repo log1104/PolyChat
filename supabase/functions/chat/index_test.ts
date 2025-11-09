@@ -8,6 +8,7 @@ import {
   generateAssistantReply,
   RateLimitError,
 } from "./index.ts";
+import { DEFAULT_CHAT_MODEL } from "../../../shared/chatModel.ts";
 
 const originalFetch = globalThis.fetch;
 
@@ -32,7 +33,12 @@ Deno.test("generateAssistantReply returns trimmed assistant message", async () =
         { status: 200 },
       ),
     async () => {
-      const reply = await generateAssistantReply("general", "Hi");
+      const reply = await generateAssistantReply(
+        "general",
+        "Hi",
+        undefined,
+        DEFAULT_CHAT_MODEL,
+      );
       assertEquals(reply, "Hello there!");
     },
   );
@@ -50,7 +56,13 @@ Deno.test(
         ),
       async () => {
         await assertRejects(
-          () => generateAssistantReply("general", "Hi"),
+          () =>
+            generateAssistantReply(
+              "general",
+              "Hi",
+              undefined,
+              DEFAULT_CHAT_MODEL,
+            ),
           Error,
           "Mentor is unavailable right now. Please try again in a moment.",
         );
@@ -70,7 +82,13 @@ Deno.test(
         ),
       async () => {
         await assertRejects(
-          () => generateAssistantReply("general", "Hi"),
+          () =>
+            generateAssistantReply(
+              "general",
+              "Hi",
+              undefined,
+              DEFAULT_CHAT_MODEL,
+            ),
           Error,
           "Mentor is taking too long to respond. Please try again.",
         );

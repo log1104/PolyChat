@@ -1,10 +1,11 @@
-﻿import { defineStore } from "pinia";
+import { defineStore } from "pinia";
 import {
   getAllMentorConfigs,
   getBaseMentorConfig,
   hasMentor,
   type MentorConfig,
 } from "../lib/mentorConfigs";
+import { DEFAULT_CHAT_MODEL } from "../../../../shared/chatModel";
 
 export type ChatRole = "user" | "assistant" | "system";
 
@@ -22,6 +23,7 @@ export interface ChatMessage {
   createdAt: string;
   mentor: string;
   files?: ChatFile[];
+  model?: string;
 }
 
 export interface ConversationSummary {
@@ -56,6 +58,9 @@ interface ChatHistoryRow {
   role: ChatRole;
   content: string;
   createdAt: string;
+  mentor?: string;
+  files?: ChatFile[];
+  model?: string;
 }
 
 interface ChatApiResponse {
@@ -115,7 +120,7 @@ export const useChatStore = defineStore("chat", {
     lastHealthCheckAt: null,
     selectionMode: "manual",
   lockedMentorId: DEFAULT_MENTOR_ID,
-    selectedModel: "openai/gpt-4o-mini",
+    selectedModel: DEFAULT_CHAT_MODEL,
     mentorConfigs: {},
   }),
   getters: {
@@ -344,7 +349,9 @@ export const useChatStore = defineStore("chat", {
           role: item.role,
           content: item.content,
           createdAt: item.createdAt,
-          mentor: data.mentorId,
+          mentor: item.mentor ?? data.mentorId,
+          files: item.files,
+          model: item.model,
         }));
 
         this.persistSession();
@@ -485,7 +492,9 @@ export const useChatStore = defineStore("chat", {
           role: item.role,
           content: item.content,
           createdAt: item.createdAt,
-          mentor: data.mentorId,
+          mentor: item.mentor ?? data.mentorId,
+          files: item.files,
+          model: item.model,
         }));
 
         this.persistSession();
@@ -595,3 +604,4 @@ export const useChatStore = defineStore("chat", {
     },
   },
 });
+

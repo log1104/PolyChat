@@ -11,6 +11,12 @@ import {
   listConversations,
   renameConversation,
 } from "./services/chatService";
+import {
+  getMentorEnvelope,
+  mentorIdParam,
+  publishMentor,
+  upsertDraft,
+} from "./services/mentorConfigService";
 
 // Load env from multiple likely locations to support monorepo runs
 const triedPaths: string[] = [];
@@ -65,8 +71,59 @@ const messagesQuerySchema = z.object({
   before: z.string().datetime().optional(),
 });
 
+// Mentor Config schemas
+const mentorDraftSchema = z.object({
+  id: z.string(),
+  persona: z.any(),
+  model: z.any(),
+  runtime: z.any(),
+  tools: z.any(),
+  metadata: z.any().optional(),
+});
+
 app.get("/health", (_req: Request, res: Response) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// Mentor Config Endpoints (Stage 2 minimal)
+app.get("/api/mentors/:id", async (req: Request, res: Response) => {
+  const id = mentorIdParam.safeParse(req.params.id);
+  if (!id.success) return res.status(400).json({ error: true, message: "Invalid mentor id" });
+  try {
+    const env = await getMentorEnvelope(id.data);
+    if (!env) return res.status(404).json({ error: true, message: "Not found" });
+    res.json(env);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json({ error: true, message });
+  }
+});
+
+app.put("/api/mentors/:id/draft", async (req: Request, res: Response) => {
+  const id = mentorIdParam.safeParse(req.params.id);
+  const draft = mentorDraftSchema.safeParse(req.body);
+  if (!id.success || !draft.success) {
+    return res.status(400).json({ error: true, message: "Invalid payload" });
+  }
+  try {
+    const env = await upsertDraft(id.data, draft.data as any, undefined);
+    res.json(env);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json({ error: true, message });
+  }
+});
+
+app.post("/api/mentors/:id/publish", async (req: Request, res: Response) => {
+  const id = mentorIdParam.safeParse(req.params.id);
+  if (!id.success) return res.status(400).json({ error: true, message: "Invalid mentor id" });
+  try {
+    const env = await publishMentor(id.data);
+    res.json(env);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json({ error: true, message });
+  }
 });
 
 app.get("/api/chat", async (req: Request, res: Response) => {
@@ -217,6 +274,16 @@ app.get(
 );
 
 const port = Number(process.env.PORT ?? 3000);
+
+// Start server only when executed directly
+if (require.main === module) {
+  app.listen(port, () => {
+    // eslint-disable-next-line no-console
+    console.log(`[api] listening on http://127.0.0.1:${port}`);
+  });
+}
+
+export default app;
 
 if (process.env.NODE_ENV !== "test") {
   app.listen(port, () => {

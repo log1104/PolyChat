@@ -2,7 +2,7 @@
   <section
     class="flex h-full flex-col gap-4 rounded-3xl border border-slate-800/70 bg-slate-900/70 p-5 shadow-card"
   >
-    <header class="flex items-center justify-between gap-4">
+    <header class="flex flex-wrap items-center justify-between gap-4">
       <label class="flex items-center gap-2 text-xs text-slate-300">
         <span aria-hidden="true" class="text-sm">🧠</span>
         <span class="sr-only">LLM model</span>
@@ -58,6 +58,8 @@
 import { computed } from "vue";
 import type { ChatMessage, ChatFile } from "../stores/chat";
 import { useChatStore } from "../stores/chat";
+import { DEFAULT_CHAT_MODEL } from "../../../../shared/chatModel";
+import { CHAT_MODEL_OPTIONS } from "../lib/chatModels";
 import MessageList from "./MessageList.vue";
 import MessageInput from "./MessageInput.vue";
 
@@ -87,12 +89,6 @@ const selectedModel = computed({
   set: (value: string) => chatStore.setSelectedModel(value),
 });
 
-const modelOptions = [
-  { label: "GPT-4o Mini", value: "openai/gpt-4o-mini" },
-  { label: "Gemini 2.0 Flash Exp", value: "google/gemini-2.0-flash-exp" },
-  { label: "Gemini Flash", value: "google/gemini-flash" },
-  { label: "Grok Beta", value: "xai/grok-beta" },
-  { label: "MiniMax M2", value: "minimax/minimax-m2" },
-  { label: "DeepSeek Chat", value: "deepseek/deepseek-chat" },
-];
+const modelOptions = CHAT_MODEL_OPTIONS;
 </script>
+
