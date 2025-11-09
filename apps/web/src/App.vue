@@ -24,12 +24,13 @@ const toggleSidebar = () => {
 const isCreatingConversation = ref(false);
 const deletingConversationId = ref<string | null>(null);
 
+const isGeneralSettingsOpen = ref(false);
 const isSettingsOpen = ref(false);
 const settingsSections = [
   {
     id: "mentor",
     label: "Mentor Settings",
-    icon: "🧠",
+    icon: "💡",
     description: "Persona, runtime, tools",
   },
   { id: "notifications", label: "Notifications", icon: "🔔", description: "Coming soon" },
@@ -47,13 +48,21 @@ if (typeof window !== "undefined") {
   systemPrefersDark.value = systemMediaQuery.matches;
 }
 
-const openSettings = (section: SettingsSectionId = "general") => {
+const openSettings = (section: SettingsSectionId = "mentor") => {
   activeSettingsSection.value = section;
   isSettingsOpen.value = true;
 };
 
 const closeSettings = () => {
   isSettingsOpen.value = false;
+};
+
+const openGeneralSettings = () => {
+  isGeneralSettingsOpen.value = true;
+};
+
+const closeGeneralSettings = () => {
+  isGeneralSettingsOpen.value = false;
 };
 
 const appliedTheme = computed(() =>
@@ -247,6 +256,14 @@ watch(
           >
             <span aria-hidden="true" class="text-lg">☰</span>
           </button>
+          <button
+            type="button"
+            class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-800 transition hover:border-slate-400 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            aria-label="Open general settings"
+            @click="openGeneralSettings"
+          >
+            <span aria-hidden="true" class="text-lg">⚙</span>
+          </button>
         </header>
 
         <nav v-if="isSidebarExpanded" class="space-y-1" aria-label="Quick actions">
@@ -262,11 +279,12 @@ watch(
           </button>
           <button
             type="button"
-            class="flex w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 transition hover:border-slate-400 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            class="flex w-full items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 transition hover:border-slate-400 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             @click="openSettings('mentor')"
             aria-label="Open mentor settings"
           >
-            <span aria-hidden="true" class="text-lg">🧠</span>
+            <span aria-hidden="true" class="text-lg">💡</span>
+            <span>Mentor</span>
           </button>
           <button
             type="button"
@@ -416,6 +434,81 @@ watch(
               </p>
             </div>
           </section>
+        </div>
+      </div>
+    </transition>
+
+    <transition name="settings-overlay">
+      <div
+        v-if="isGeneralSettingsOpen"
+        class="fixed inset-0 z-60 flex items-center justify-center bg-black/60 px-4 py-8"
+        @click.self="closeGeneralSettings"
+      >
+        <div
+          class="w-[min(720px,95vw)] max-h-[90vh] rounded-3xl bg-slate-900 text-slate-100 shadow-2xl ring-1 ring-white/10"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div class="flex items-center justify-between border-b border-white/10 px-6 py-4">
+            <div>
+              <h2 class="text-xl font-semibold text-white">General</h2>
+              <p class="text-sm text-slate-400">
+                Appearance and language preferences.
+              </p>
+            </div>
+            <button
+              type="button"
+              class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 text-lg"
+              aria-label="Close general settings"
+              @click="closeGeneralSettings"
+            >
+              ✕
+            </button>
+          </div>
+          <div class="space-y-5 overflow-y-auto p-6">
+            <div class="rounded-2xl border border-white/10 bg-white/5 p-5">
+              <h3 class="text-sm font-semibold text-white">Appearance</h3>
+              <p class="text-xs text-slate-400">Choose your theme for this device.</p>
+              <div class="mt-4 grid gap-3 md:grid-cols-3">
+                <label
+                  class="flex cursor-pointer flex-col gap-1 rounded-2xl border border-white/15 bg-white/5 px-3 py-3 text-sm"
+                  :class="theme === 'system' ? 'ring-2 ring-white/40' : ''"
+                >
+                  <span class="text-xs font-semibold text-slate-300">System</span>
+                  <span class="text-[11px] text-slate-500">Match OS setting</span>
+                  <input class="sr-only" type="radio" value="system" v-model="theme" />
+                </label>
+                <label
+                  class="flex cursor-pointer flex-col gap-1 rounded-2xl border border-white/15 bg-white/5 px-3 py-3 text-sm"
+                  :class="theme === 'light' ? 'ring-2 ring-white/40' : ''"
+                >
+                  <span class="text-xs font-semibold text-slate-300">Light</span>
+                  <span class="text-[11px] text-slate-500">Bright surfaces</span>
+                  <input class="sr-only" type="radio" value="light" v-model="theme" />
+                </label>
+                <label
+                  class="flex cursor-pointer flex-col gap-1 rounded-2xl border border-white/15 bg-white/5 px-3 py-3 text-sm"
+                  :class="theme === 'dark' ? 'ring-2 ring-white/40' : ''"
+                >
+                  <span class="text-xs font-semibold text-slate-300">Dark</span>
+                  <span class="text-[11px] text-slate-500">Low-light friendly</span>
+                  <input class="sr-only" type="radio" value="dark" v-model="theme" />
+                </label>
+              </div>
+            </div>
+            <div class="rounded-2xl border border-white/10 bg-white/5 p-5">
+              <h3 class="text-sm font-semibold text-white">Language</h3>
+              <p class="text-xs text-slate-400">
+                Auto-detect for now. Manual selection coming soon.
+              </p>
+            </div>
+            <div class="rounded-2xl border border-white/10 bg-white/5 p-5">
+              <h3 class="text-sm font-semibold text-white">Data controls</h3>
+              <p class="text-xs text-slate-400">
+                Coming soon: manage retention, exports, linked accounts.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </transition>
