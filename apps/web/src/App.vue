@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ChatWindow from "./components/ChatWindow.vue";
-import MentorSettingsPanel from "./components/MentorSettingsPanel.vue";
 import { useChatStore } from "./stores/chat";
 import type { ChatFile } from "./stores/chat";
 
@@ -26,6 +25,19 @@ const isCreatingConversation = ref(false);
 const deletingConversationId = ref<string | null>(null);
 
 const isSettingsOpen = ref(false);
+const settingsSections = [
+  {
+    id: "mentor",
+    label: "Mentor Settings",
+    icon: "🧠",
+    description: "Persona, runtime, tools",
+  },
+  { id: "notifications", label: "Notifications", icon: "🔔", description: "Coming soon" },
+  { id: "privacy", label: "Data controls", icon: "🛡", description: "Coming soon" },
+  { id: "account", label: "Account", icon: "👤", description: "Coming soon" },
+] as const;
+type SettingsSectionId = (typeof settingsSections)[number]["id"];
+const activeSettingsSection = ref<SettingsSectionId>("mentor");
 const theme = ref<"light" | "dark" | "system">("system");
 const systemPrefersDark = ref(false);
 let systemMediaQuery: MediaQueryList | null = null;
@@ -35,7 +47,8 @@ if (typeof window !== "undefined") {
   systemPrefersDark.value = systemMediaQuery.matches;
 }
 
-const openSettings = () => {
+const openSettings = (section: SettingsSectionId = "general") => {
+  activeSettingsSection.value = section;
   isSettingsOpen.value = true;
 };
 
@@ -182,6 +195,15 @@ watch(systemPrefersDark, () => {
     applyTheme();
   }
 });
+
+watch(
+  () => isSettingsOpen.value,
+  (open) => {
+    if (!open) {
+      activeSettingsSection.value = "mentor";
+    }
+  },
+);
 </script>
 
 <template>
@@ -215,7 +237,7 @@ watch(systemPrefersDark, () => {
         class="flex h-full flex-col gap-6 py-5"
         :class="isSidebarExpanded ? 'px-4' : 'items-center px-2'"
       >
-        <header class="flex items-center gap-3">
+        <header class="flex w-full items-center justify-between gap-3">
           <button
             type="button"
             class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-800 transition hover:border-slate-400 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
@@ -225,14 +247,6 @@ watch(systemPrefersDark, () => {
           >
             <span aria-hidden="true" class="text-lg">☰</span>
           </button>
-          <div v-if="isSidebarExpanded">
-            <p class="text-sm font-semibold text-slate-900 dark:text-white">
-              PolyChat
-            </p>
-            <p class="text-xs text-slate-500 dark:text-slate-400">
-              Mentor Studio
-            </p>
-          </div>
         </header>
 
         <nav v-if="isSidebarExpanded" class="space-y-1" aria-label="Quick actions">
@@ -245,6 +259,14 @@ watch(systemPrefersDark, () => {
           >
             <span aria-hidden="true" class="text-lg">＋</span>
             New chat
+          </button>
+          <button
+            type="button"
+            class="flex w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 transition hover:border-slate-400 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            @click="openSettings('mentor')"
+            aria-label="Open mentor settings"
+          >
+            <span aria-hidden="true" class="text-lg">🧠</span>
           </button>
           <button
             type="button"
@@ -265,13 +287,6 @@ watch(systemPrefersDark, () => {
             Library
           </button>
         </nav>
-
-        <section v-if="isSidebarExpanded" class="space-y-2">
-          <p class="sticky top-0 z-10 bg-slate-100/90 text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:bg-slate-950/80 dark:text-slate-400">
-            Mentor
-          </p>
-          <MentorSettingsPanel v-if="activeMentor" :mentor-id="activeMentor" />
-        </section>
 
         <section v-if="isSidebarExpanded" class="space-y-2 pb-6">
           <p class="sticky top-0 z-10 bg-slate-100/90 text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:bg-slate-950/80 dark:text-slate-400">
@@ -328,108 +343,79 @@ watch(systemPrefersDark, () => {
       </div>
     </aside>
 
-    <!-- Settings drawer backdrop -->
-    <div
-      v-if="isSettingsOpen"
-      class="fixed inset-0 z-65 bg-black/50 dark:bg-black/50"
-      @click="closeSettings"
-    ></div>
-
-    <!-- Settings drawer -->
-    <transition name="slide-left">
+    <transition name="settings-overlay">
       <div
         v-if="isSettingsOpen"
-        id="settings-drawer"
-        class="fixed left-0 top-0 z-70 h-full w-80 bg-white border-r border-slate-200 dark:bg-slate-900 dark:border-slate-700 shadow-lg transition-colors"
+        class="fixed inset-0 z-70 flex items-center justify-center bg-black/60 px-4 py-8"
+        @click.self="closeSettings"
       >
-        <div class="flex h-full flex-col">
-          <header
-            class="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700"
-          >
-            <h2 class="text-lg font-semibold text-slate-900 dark:text-white">
-              Settings
-            </h2>
-            <button
-              @click="closeSettings"
-              class="text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-white text-xl leading-none"
-            >
-              ✕
-            </button>
-          </header>
-          <div class="flex-1 overflow-y-auto p-4 space-y-6">
-            <!-- Theme Settings -->
-            <section>
-              <h3
-                class="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3"
-              >
-                Appearance
-              </h3>
-              <div class="space-y-2">
-                <label class="flex items-center space-x-2">
-                  <input
-                    type="radio"
-                    :value="'system'"
-                    v-model="theme"
-                    class="text-blue-600"
-                  />
-                  <span class="text-sm text-slate-900 dark:text-slate-200"
-                    >Match system</span
-                  >
-                </label>
-                <label class="flex items-center space-x-2">
-                  <input
-                    type="radio"
-                    :value="'light'"
-                    v-model="theme"
-                    class="text-blue-600"
-                  />
-                  <span class="text-sm text-slate-900 dark:text-slate-200"
-                    >Light</span
-                  >
-                </label>
-                <label class="flex items-center space-x-2">
-                  <input
-                    type="radio"
-                    :value="'dark'"
-                    v-model="theme"
-                    class="text-blue-600"
-                  />
-                  <span class="text-sm text-slate-900 dark:text-slate-200"
-                    >Dark</span
-                  >
-                </label>
-              </div>
-            </section>
-            <!-- Data Management -->
-            <section>
-              <h3
-                class="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3"
-              >
-                Data Management
-              </h3>
+        <div
+          class="flex w-[min(960px,95vw)] max-h-[90vh] rounded-3xl bg-slate-900 text-slate-100 shadow-2xl ring-1 ring-white/10"
+          role="dialog"
+          aria-modal="true"
+        >
+          <aside class="flex w-64 flex-col border-r border-white/10">
+            <div class="flex items-center justify-between px-4 py-3">
+              <p class="text-sm font-semibold uppercase tracking-wide text-slate-300">
+                Settings
+              </p>
               <button
-                @click="clearData"
-                class="w-full rounded border border-red-600 bg-red-50 dark:bg-red-900/20 p-2 text-sm text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/40 transition"
+                type="button"
+                class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/20 text-lg"
+                @click="closeSettings"
+                aria-label="Close settings"
               >
-                Clear All Data
+                ✕
               </button>
-            </section>
-            <!-- Help -->
-            <section>
-              <h3
-                class="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3"
+            </div>
+            <nav class="flex-1 space-y-1 overflow-y-auto px-2 pb-4">
+              <button
+                v-for="section in settingsSections"
+                :key="section.id"
+                type="button"
+                class="flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left transition"
+                :class="
+                  activeSettingsSection === section.id
+                    ? 'bg-white/10 text-white'
+                    : 'text-slate-400 hover:bg-white/5'
+                "
+                @click="activeSettingsSection = section.id"
               >
-                Help
-              </h3>
-              <a
-                href="https://github.com/log1104/PolyChat"
-                target="_blank"
-                class="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
-              >
-                Documentation & GitHub
-              </a>
-            </section>
-          </div>
+                <span aria-hidden="true" class="text-lg">{{ section.icon }}</span>
+                <div class="flex-1">
+                  <p class="text-sm font-semibold">{{ section.label }}</p>
+                  <p class="text-xs">{{ section.description }}</p>
+                </div>
+              </button>
+            </nav>
+          </aside>
+          <section class="flex-1 overflow-y-auto p-8 space-y-6">
+            <div v-if="activeSettingsSection === 'mentor'" class="space-y-5">
+              <div>
+                <h2 class="text-2xl font-semibold text-white">Mentor Settings</h2>
+                <p class="text-sm text-slate-400">
+                  Configure persona, runtime, and future tool integrations.
+                </p>
+              </div>
+              <ul class="space-y-3 text-sm text-slate-300">
+                <li>• Persona: system prompt per mentor (already editable on the left).</li>
+                <li>• Runtime: timeouts, max tokens, retries, rate limits (coming soon).</li>
+                <li>• Tools: per-mentor integrations like Stockfish or finance data.</li>
+              </ul>
+              <p class="text-xs text-slate-500">
+                Full editor will live here once the config API lands. For now, use the sidebar panel for persona updates.
+              </p>
+            </div>
+            <div v-else class="space-y-4 text-sm text-slate-300">
+              <h2 class="text-2xl font-semibold text-white">
+                {{ settingsSections.find((s) => s.id === activeSettingsSection)?.label }}
+                (Coming soon)
+              </h2>
+              <p class="text-slate-400">
+                This section isn’t ready yet. We’ll surface additional preferences here in a future release.
+              </p>
+            </div>
+          </section>
         </div>
       </div>
     </transition>
@@ -469,5 +455,15 @@ watch(systemPrefersDark, () => {
 
 .slide-left-leave-to {
   transform: translateX(-100%);
+}
+
+.settings-overlay-enter-active,
+.settings-overlay-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.settings-overlay-enter-from,
+.settings-overlay-leave-to {
+  opacity: 0;
 }
 </style>
