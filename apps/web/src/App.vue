@@ -543,8 +543,66 @@ watch(
                   </div>
                 </div>
               </div>
+              <div class="rounded-2xl border border-white/10 bg-white/5 p-5 text-sm text-slate-100">
+                <div class="mb-4 flex items-center justify-between text-xs uppercase tracking-wide text-slate-400">
+                  <span>Runtime Controls</span>
+                  <span>Coming soon</span>
+                </div>
+                <div class="space-y-4 text-sm text-slate-300">
+                  <div class="flex flex-col gap-1">
+                    <label class="text-xs font-medium text-slate-200">Timeout (seconds)</label>
+                    <input
+                      type="number"
+                      disabled
+                      placeholder="15"
+                      class="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-slate-200"
+                    />
+                    <p class="text-[11px] text-slate-500">
+                      Auto-cancel mentor responses once this timer expires.
+                    </p>
+                  </div>
+                  <div class="grid gap-4 md:grid-cols-2">
+                    <div class="flex flex-col gap-1">
+                      <label class="text-xs font-medium text-slate-200">Max tokens</label>
+                      <input
+                        type="number"
+                        disabled
+                        placeholder="400"
+                        class="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-slate-200"
+                      />
+                    </div>
+                    <div class="flex flex-col gap-1">
+                      <label class="text-xs font-medium text-slate-200">Retries</label>
+                      <input
+                        type="number"
+                        disabled
+                        placeholder="1"
+                        class="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-slate-200"
+                      />
+                    </div>
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <label class="text-xs font-medium text-slate-200">Rate limit</label>
+                    <input
+                      type="text"
+                      disabled
+                      placeholder="10 requests / 5 min"
+                      class="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-slate-200"
+                    />
+                  </div>
+                  <div class="flex items-center justify-between rounded-2xl border border-dashed border-white/15 px-3 py-2 text-xs">
+                    <div class="text-slate-400">
+                      <p class="font-semibold">Streaming replies</p>
+                      <p class="text-[11px] text-slate-500">
+                        Toggle live token streaming per mentor.
+                      </p>
+                    </div>
+                    <span class="text-slate-500">Disabled</span>
+                  </div>
+                </div>
+              </div>
               <div class="rounded-2xl border border-dashed border-white/15 bg-white/5 p-5 text-sm text-slate-400">
-                Runtime & tools placeholders will appear here once configurable.
+                Tools & integrations editor will land here once configurable.
               </div>
             </div>
             <div v-else class="space-y-4 text-sm text-slate-300">
