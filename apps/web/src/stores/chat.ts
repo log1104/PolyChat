@@ -700,7 +700,6 @@ export const useChatStore = defineStore("chat", {
           model: item.model,
         }));
 
-        this.persistSession();
         // Keep conversation list in sync when switching
         this.loadConversations().catch(() => {});
       } catch (error) {
@@ -735,9 +734,12 @@ export const useChatStore = defineStore("chat", {
       this.ensureMentorConfigsLoaded();
       await this.loadConversations();
       if (!this.sessionId && this.conversations.length) {
-        await this.fetchExistingConversation(this.conversations[0].id).catch(
-          () => {},
-        );
+        const firstConversation = this.conversations[0];
+        if (firstConversation) {
+          await this.fetchExistingConversation(firstConversation.id).catch(
+            () => {},
+          );
+        }
       }
       this.ensureServerMentorOverridesLoaded().catch(() => {});
       this.checkHealth().catch(() => {});

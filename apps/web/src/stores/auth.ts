@@ -66,21 +66,22 @@ export const useAuthStore = defineStore("auth", {
       this.user = null;
     },
     async syncProfile(user: User) {
-      const email = user.email ?? `${user.id}@polychat.local`;
-      await supabase
-        .from("users")
-        .upsert(
-          {
-            id: user.id,
-            email,
-          },
-          { onConflict: "id" },
-        )
-        .select("id")
-        .single()
-        .catch(() => {
-          // Swallow RLS errors to avoid blocking auth flow.
-        });
+      try {
+        const email = user.email ?? `${user.id}@polychat.local`;
+        await supabase
+          .from("users")
+          .upsert(
+            {
+              id: user.id,
+              email,
+            },
+            { onConflict: "id" },
+          )
+          .select("id")
+          .single();
+      } catch {
+        // Swallow RLS/connection issues to avoid blocking auth flow.
+      }
     },
   },
 });
