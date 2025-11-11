@@ -174,19 +174,6 @@ const handleSystemChange = (event: MediaQueryListEvent) => {
   systemPrefersDark.value = event.matches;
 };
 
-const clearData = () => {
-  if (
-    confirm("Are you sure you want to clear all data? This cannot be undone.")
-  ) {
-    chatStore.clearPersistedSession({ clearUser: true });
-    chatStore.resetChat();
-    // Clear localStorage
-    localStorage.clear();
-    // Reload page
-    window.location.reload();
-  }
-};
-
 const updateDraft = (value: string) => {
   draft.value = value;
 };

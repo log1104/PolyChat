@@ -1,6 +1,7 @@
 param(
     [switch]$WithFrontend,
-    [switch]$SkipSupabaseStart
+    [switch]$SkipSupabaseStart,
+    [switch]$ResetSupabaseContainers
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,6 +14,40 @@ function Write-Step {
 function Write-Warn {
     param([string]$Message)
     Write-Host "!!  $Message" -ForegroundColor Yellow
+}
+
+function Reset-SupabaseEnvironment {
+    param(
+        [string]$ProjectName
+    )
+
+    Write-Step "Resetting Supabase containers for project '$ProjectName'"
+    try {
+        supabase stop 2>$null | Out-Null
+    } catch {
+        Write-Warn "supabase stop reported an error: $($_.Exception.Message)"
+    }
+
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+        Write-Warn "Docker CLI not found; cannot remove stale Supabase containers automatically."
+        return
+    }
+
+    try {
+        $containerList = docker ps -a --filter "label=com.supabase.cli.project=$ProjectName" --format "{{.ID}}"
+        if ($LASTEXITCODE -ne 0) {
+            throw "docker ps exited with code $LASTEXITCODE"
+        }
+        $containers = $containerList -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+        if ($containers.Count -eq 0) {
+            Write-Step "No leftover containers detected for '$ProjectName'."
+            return
+        }
+        Write-Step "Removing $($containers.Count) leftover Supabase container(s)."
+        docker rm -f @containers | Out-Null
+    } catch {
+        Write-Warn "Failed to prune Supabase containers: $($_.Exception.Message)"
+    }
 }
 
 $shellCommand = Get-Command pwsh -ErrorAction SilentlyContinue
@@ -49,6 +84,7 @@ function Import-DotEnv {
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $repoRoot
+$projectName = Split-Path $repoRoot -Leaf
 
 if (-not (Get-Command supabase -ErrorAction SilentlyContinue)) {
     throw "Supabase CLI not found. Install it before running this script."
@@ -85,6 +121,13 @@ if (-not $SkipSupabaseStart) {
         }
     } catch {
         $supabaseRunning = $false
+    }
+
+    if (-not $supabaseRunning -or $ResetSupabaseContainers) {
+        Reset-SupabaseEnvironment -ProjectName $projectName
+        if ($ResetSupabaseContainers) {
+            $supabaseRunning = $false
+        }
     }
 
     if (-not $supabaseRunning) {

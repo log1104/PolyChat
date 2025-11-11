@@ -17,6 +17,7 @@ import {
   publishMentor,
   upsertDraft,
 } from "./services/mentorConfigService";
+import { mentorConfigCoreSchema } from "./schema/mentorConfigSchema";
 
 // Load env from multiple likely locations to support monorepo runs
 const triedPaths: string[] = [];
@@ -106,7 +107,11 @@ app.put("/api/mentors/:id/draft", async (req: Request, res: Response) => {
     return res.status(400).json({ error: true, message: "Invalid payload" });
   }
   try {
-    const env = await upsertDraft(id.data, draft.data as any, undefined);
+    const env = await upsertDraft(
+      id.data,
+      mentorConfigCoreSchema.parse(draft.data),
+      undefined,
+    );
     res.json(env);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";
@@ -278,16 +283,7 @@ const port = Number(process.env.PORT ?? 3000);
 // Start server only when executed directly
 if (require.main === module) {
   app.listen(port, () => {
-    // eslint-disable-next-line no-console
     console.log(`[api] listening on http://127.0.0.1:${port}`);
-  });
-}
-
-export default app;
-
-if (process.env.NODE_ENV !== "test") {
-  app.listen(port, () => {
-    console.log(`[api] listening on http://localhost:${port}`);
   });
 }
 

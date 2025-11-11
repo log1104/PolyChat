@@ -5,7 +5,7 @@ import {
   mentorConfigEnvelopeSchema,
   type MentorConfigCore,
   type MentorConfigEnvelope,
-} from "@polychat/mentors/src/schema";
+} from "../schema/mentorConfigSchema";
 
 export const mentorIdParam = z.string().min(1);
 
@@ -29,7 +29,11 @@ export async function upsertDraft(
   updatedBy?: string,
 ): Promise<MentorConfigEnvelope> {
   const parsed = mentorConfigCoreSchema.parse(draft);
-  const payload = { id, draft: parsed, updated_by: updatedBy ?? null } as any;
+  const payload: {
+    id: string;
+    draft: MentorConfigCore;
+    updated_by: string | null;
+  } = { id, draft: parsed, updated_by: updatedBy ?? null };
   const { data, error } = await supabase
     .from("mentor_configs")
     .upsert(payload, { onConflict: "id" })

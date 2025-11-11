@@ -1,6 +1,5 @@
 import { z } from "zod";
 
-// Persona schema — core of mentor configuration
 export const personaSchema = z.object({
   system_prompt: z.string().min(1, "system_prompt is required"),
   style_guidelines: z.array(z.string()).default([]),
@@ -35,7 +34,7 @@ export const personaSchema = z.object({
       }),
     )
     .optional(),
-  knowledge_cutoff: z.string().optional(), // ISO date string
+  knowledge_cutoff: z.string().optional(),
   citation_policy: z
     .enum(["required", "encouraged", "optional", "never"])
     .optional(),
@@ -49,7 +48,6 @@ export const personaSchema = z.object({
     .optional(),
 });
 
-// Model + runtime schema
 export const modelSchema = z.object({
   provider: z.string().default("openrouter"),
   model_id: z.string().default("openai/gpt-4o-mini"),
@@ -68,7 +66,10 @@ export const runtimeSchema = z.object({
   timeout_ms: z.number().int().positive().default(20000),
   retries: z.number().int().min(0).default(2),
   rate_limit_hint: z
-    .object({ window_seconds: z.number().int().positive(), max_requests: z.number().int().min(1) })
+    .object({
+      window_seconds: z.number().int().positive(),
+      max_requests: z.number().int().min(1),
+    })
     .optional(),
 });
 
@@ -86,7 +87,10 @@ export const toolsSchema = z.object({
 export const mentorConfigCoreSchema = z.object({
   id: z.string(),
   persona: personaSchema,
-  model: modelSchema.default({ provider: "openrouter", model_id: "openai/gpt-4o-mini" }),
+  model: modelSchema.default({
+    provider: "openrouter",
+    model_id: "openai/gpt-4o-mini",
+  }),
   runtime: runtimeSchema.default({ timeout_ms: 20000, retries: 2 }),
   tools: toolsSchema.default({ items: [] }),
   metadata: z
@@ -98,7 +102,6 @@ export const mentorConfigCoreSchema = z.object({
     .default({}),
 });
 
-// Draft/Published wrapper for persistence
 export const mentorConfigEnvelopeSchema = z.object({
   id: z.string(),
   draft: mentorConfigCoreSchema,
@@ -111,7 +114,6 @@ export type Persona = z.infer<typeof personaSchema>;
 export type MentorConfigCore = z.infer<typeof mentorConfigCoreSchema>;
 export type MentorConfigEnvelope = z.infer<typeof mentorConfigEnvelopeSchema>;
 
-// Back-compat loader: map legacy JSON files to the new shape.
 type LegacyToolObject = {
   id?: unknown;
   config?: unknown;
@@ -138,7 +140,6 @@ function coerceLegacyTool(
     return { id: tool, enabled: true, config: {}, dependencies: [] };
   }
 
-  const idCandidate = tool.id;
   const configCandidate = isRecord(tool.config)
     ? (tool.config as Record<string, unknown>)
     : {};
@@ -147,9 +148,8 @@ function coerceLegacyTool(
     : [];
 
   return {
-    id: typeof idCandidate === "string" && idCandidate.trim()
-      ? idCandidate
-      : "tool",
+    id:
+      typeof tool.id === "string" && tool.id.trim() ? tool.id : "tool",
     enabled: true,
     config: configCandidate,
     dependencies: dependenciesCandidate,
@@ -159,7 +159,6 @@ function coerceLegacyTool(
 export function normalizeLegacyConfig(
   legacy: LegacyMentorConfig,
 ): MentorConfigCore {
-  // Legacy shape: { id, systemPrompt, styleGuidelines, tooling: { tools[], fallback } }
   const persona: Persona = {
     system_prompt:
       typeof legacy.systemPrompt === "string" ? legacy.systemPrompt : "",
@@ -175,9 +174,8 @@ export function normalizeLegacyConfig(
     : [];
 
   return mentorConfigCoreSchema.parse({
-    id: typeof legacy.id === "string" && legacy.id.trim()
-      ? legacy.id
-      : "general",
+    id:
+      typeof legacy.id === "string" && legacy.id.trim() ? legacy.id : "general",
     persona,
     model: { provider: "openrouter", model_id: "openai/gpt-4o-mini" },
     runtime: { timeout_ms: 20000, retries: 2 },

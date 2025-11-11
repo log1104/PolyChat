@@ -3,8 +3,12 @@ node_modules/
 dist/
 
 # environment files
-.env*
-apps/*/.env*
+.env
+.env.*
+!.env.example
+apps/*/.env
+apps/*/.env.*
+!apps/*/.env.example
 
 # build outputs
 

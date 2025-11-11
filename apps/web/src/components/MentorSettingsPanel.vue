@@ -28,7 +28,9 @@ onMounted(() => {
   try {
     const saved = localStorage.getItem(COLLAPSE_KEY);
     if (saved === "false") collapsed.value = false;
-  } catch {}
+  } catch (error) {
+    console.debug("MentorSettingsPanel: unable to read collapse state", error);
+  }
   chatStore.ensureMentorConfigsLoaded();
   if (!selectedMentorId.value) {
     selectedMentorId.value = mentors.value[0]?.id ?? props.mentorId;
@@ -81,7 +83,9 @@ function toggleCollapsed() {
   collapsed.value = !collapsed.value;
   try {
     localStorage.setItem(COLLAPSE_KEY, String(collapsed.value));
-  } catch {}
+  } catch (error) {
+    console.debug("MentorSettingsPanel: unable to persist collapse state", error);
+  }
 }
 
 const overrideStatus = computed(() =>

@@ -58,7 +58,6 @@
 import { computed } from "vue";
 import type { ChatMessage, ChatFile } from "../stores/chat";
 import { useChatStore } from "../stores/chat";
-import { DEFAULT_CHAT_MODEL } from "../../../../shared/chatModel";
 import { CHAT_MODEL_OPTIONS } from "../lib/chatModels";
 import MessageList from "./MessageList.vue";
 import MessageInput from "./MessageInput.vue";
