@@ -88,6 +88,46 @@ function toggleCollapsed() {
     localStorage.setItem(COLLAPSE_KEY, String(collapsed.value));
   } catch {}
 }
+
+const overrideStatus = computed(() =>
+  chatStore.mentorOverrideStatusFor(selectedMentorId.value),
+);
+
+const isSaving = computed(() => overrideStatus.value?.saving ?? false);
+
+const statusMessage = computed(() => {
+  const status = overrideStatus.value;
+  if (status?.error) return status.error;
+  if (isSaving.value) return "Saving...";
+  if (isDirty.value) return "Unsaved changes";
+  if (hasOverride.value) return "Custom prompt in use";
+  if (status?.loaded) return "Using default prompt";
+  return "Ready to edit";
+});
+
+const canSave = computed(() => isDirty.value && !isSaving.value);
+const canReset = computed(() => hasOverride.value && !isSaving.value);
+
+async function savePrompt() {
+  if (!selectedMentorId.value || !canSave.value) return;
+  try {
+    await chatStore.saveMentorOverride(
+      selectedMentorId.value,
+      promptDraft.value,
+    );
+  } catch {
+    // statusMessage will surface the error
+  }
+}
+
+async function resetPrompt() {
+  if (!selectedMentorId.value || !canReset.value) return;
+  try {
+    await chatStore.clearMentorOverride(selectedMentorId.value);
+  } catch {
+    // status message already reflects error
+  }
+}
 </script>
 
 <template>
@@ -154,17 +194,29 @@ function toggleCollapsed() {
         rows="5"
         class="w-full resize-none rounded-lg border border-slate-300 bg-white p-2 text-xs text-slate-900 shadow-sm transition focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-500"
       ></textarea>
-      <div class="mt-2 flex items-center justify-between">
+      <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
         <span class="text-[10px] text-slate-500 dark:text-slate-400">
-          Draft changes (saving wired later)
+          {{ statusMessage }}
         </span>
-        <button
-          type="button"
-          class="rounded-md bg-slate-900 px-2.5 py-1 text-[11px] font-semibold text-white opacity-60 dark:bg-slate-100 dark:text-slate-900"
-          disabled
-        >
-          Save (coming soon)
-        </button>
+        <div class="flex gap-2">
+          <button
+            type="button"
+            class="rounded-md border border-slate-400/60 px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-slate-500 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:border-slate-400"
+            :disabled="!canReset"
+            @click="resetPrompt"
+          >
+            Reset
+          </button>
+          <button
+            type="button"
+            class="rounded-md bg-slate-900 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
+            :disabled="!canSave"
+            @click="savePrompt"
+          >
+            <span v-if="isSaving">Saving…</span>
+            <span v-else>Save</span>
+          </button>
+        </div>
       </div>
     </div>
 

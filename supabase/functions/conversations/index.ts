@@ -20,7 +20,8 @@ const listConversationsSchema = z.object({
 
 const createConversationSchema = z.object({
   userId: z.string().optional(),
-  mentorId: z.string().optional()
+  mentorId: z.string().optional(),
+  bootstrap: z.boolean().optional()
 });
 
 const deleteConversationSchema = z.object({
@@ -59,7 +60,12 @@ serve(async (req: Request) => {
     if (req.method === "POST") {
       const payload = createConversationSchema.parse(await req.json());
       const userId = await ensureUser(supabaseClient, payload.userId);
-      const result = await createConversation(supabaseClient, userId, payload.mentorId);
+      const result = await createConversation(
+        supabaseClient,
+        userId,
+        payload.mentorId,
+        payload.bootstrap ?? false
+      );
       return respond(result, 200);
     }
 
@@ -114,7 +120,8 @@ async function listConversations(
 async function createConversation(
   supabaseClient: ReturnType<typeof createClient>,
   userId: string,
-  mentorId?: string
+  mentorId?: string,
+  bootstrap = false
 ) {
   const { data, error } = await supabaseClient
     .from("conversations")
@@ -132,7 +139,7 @@ async function createConversation(
     throw new Error(`Failed to create conversation: ${error?.message ?? "Unknown error"}`);
   }
 
-  return {
+  const createdConversation = {
     id: data.id as string,
     userId: data.user_id as string,
     mentorId: data.mentor as string,
@@ -141,6 +148,46 @@ async function createConversation(
     preview: toPreview((data.preview as string | null) ?? (data.title as string | null)),
     lastMessageAt: (data.last_message_at as string | null) ?? undefined
   };
+
+  if (bootstrap) {
+    await insertBootstrapGreeting(supabaseClient, createdConversation.id, createdConversation.mentorId);
+  }
+
+  return createdConversation;
+}
+
+async function insertBootstrapGreeting(
+  supabaseClient: ReturnType<typeof createClient>,
+  conversationId: string,
+  mentorId: string
+) {
+  const greeting =
+    "Hello! I'm your PolyChat mentor. How can I help you today?";
+
+  const { error: messageError } = await supabaseClient.from("messages").insert({
+    conversation_id: conversationId,
+    role: "assistant",
+    content: greeting,
+    metadata: { mentor: mentorId },
+    created_at: new Date().toISOString()
+  });
+
+  if (messageError) {
+    console.error("[conversations] failed to insert greeting", messageError);
+    return;
+  }
+
+  const { error: updateError } = await supabaseClient
+    .from("conversations")
+    .update({
+      preview: toPreview(greeting),
+      last_message_at: new Date().toISOString()
+    })
+    .eq("id", conversationId);
+
+  if (updateError) {
+    console.error("[conversations] failed to update conversation preview for greeting", updateError);
+  }
 }
 
 function respond(body: unknown, status = 200) {

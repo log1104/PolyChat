@@ -104,6 +104,10 @@ Write-Step "Launching Edge Function: chat"
 $functionCommand = "cd `"$repoRoot`"; supabase functions serve chat --no-verify-jwt --watch --env-file `"$envFile`""
 Start-Process $shellPath -ArgumentList "-NoExit", "-Command", $functionCommand | Out-Null
 
+Write-Step "Launching Edge Function: mentor-overrides"
+$mentorOverridesCommand = "cd `"$repoRoot`"; supabase functions serve mentor-overrides --no-verify-jwt --watch --env-file `"$envFile`""
+Start-Process $shellPath -ArgumentList "-NoExit", "-Command", $mentorOverridesCommand | Out-Null
+
 if ($WithFrontend) {
     Write-Step "Launching frontend dev server on http://127.0.0.1:5173/"
     $frontendCommand = "cd `"$repoRoot`"; pnpm --filter @polychat/web dev -- --host 127.0.0.1"

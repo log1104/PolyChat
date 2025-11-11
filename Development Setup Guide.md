@@ -1,4 +1,4 @@
-# Development Setup Guide
+Ôªø# Development Setup Guide
 
 ## 1. Overview
 
@@ -18,18 +18,18 @@ Use this guide to bootstrap a local environment for the Mentor System. The steps
 ```
 PolyChat/
 +- apps/
-¶  +- web/           # Vue 3 chat frontend (Vite)
-¶  +- api/           # Optional Express gateway (local use only)
+¬¶  +- web/           # Vue 3 chat frontend (Vite)
+¬¶  +- api/           # Optional Express gateway (local use only)
 +- packages/
-¶  +- mentors/       # Shared mentor definitions and prompt loaders
-¶  +- tooling/       # Tool client helpers (Stockfish, finance APIs, etc.)
+¬¶  +- mentors/       # Shared mentor definitions and prompt loaders
+¬¶  +- tooling/       # Tool client helpers (Stockfish, finance APIs, etc.)
 +- config/mentors/   # JSON prompt templates
 +- design/           # UI tokens and assets
 +- scripts/          # CLI utilities (embedding, seeding)
 +- supabase/
-¶  +- migrations/    # SQL schema migrations
-¶  +- seeds/         # Seed scripts (e.g., mentor registry)
-¶  +- functions/     # Supabase Edge Functions (chat API)
+¬¶  +- migrations/    # SQL schema migrations
+¬¶  +- seeds/         # Seed scripts (e.g., mentor registry)
+¬¶  +- functions/     # Supabase Edge Functions (chat API)
 +- docs/             # Markdown documentation hub
 +- .env.example      # Root environment template
 +- package.json      # Workspace scripts and metadata
@@ -67,7 +67,7 @@ Environment variables are split per-package for better isolation in the monorepo
 ### 5.1 Root .env (Shared/Optional)
 - Copy `.env.example` ? `.env` (if needed for shared vars; currently empty).
 - The default chat model lives in `shared/chatModel.ts`, keeping the UI selector and Edge Function fallback synchronized.
-- No secrets hereóonly placeholders or shared non-sensitive vars.
+- No secrets here‚Äîonly placeholders or shared non-sensitive vars.
 
 ### 5.2 Web App (apps/web/.env.local)
 - Copy `apps/web/.env.example` ? `apps/web/.env.local`.
@@ -185,10 +185,13 @@ Runs frontend + Express gateway in parallel (Supabase function still recommended
   ```
   
   Earlier ad-hoc formats or BOM markers caused parse errors.
-- Use canonical env names. Edge Functions read `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` exactly. Donít prefix with `LOCAL_`.
+- Use canonical env names. Edge Functions read `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` exactly. Don‚Äôt prefix with `LOCAL_`.
 - Vite envs are compile-time. Frontend reads only `VITE_*` during build/dev. Put `VITE_API_BASE_URL` and `VITE_SUPABASE_ANON_KEY` in `apps/web/.env.local` (and restart Vite after changes).
-- Edge auth headers. Calling a Supabase function requires `Authorization: Bearer <anon key>` and `apikey: <anon key>`. Opening the function URL directly in the browser will show ìMissing authorization headerî. Test with the app or curl.
+- Edge auth headers. Calling a Supabase function requires `Authorization: Bearer <anon key>` and `apikey: <anon key>`. Opening the function URL directly in the browser will show ‚ÄúMissing authorization header‚Äù. Test with the app or curl.
 - Windows line endings / BOM. Creating TOML/JSON with BOM or mixing CRLF/LF can break parsers; save as UTF-8 without BOM when possible.
 - Vercel static output. Either set project Output Directory to `apps/web/dist` or copy to root `dist/` in `vercel.json`. Commit `pnpm-lock.yaml` so Vercel uses pnpm reliably.
 - ESLint v9 flat config. Use `eslint.config.js` (flat) instead of legacy `.eslintrc.*`; align TypeScript parser options or lint will fail.
 - Env reload. After editing `.env` used by `supabase functions serve --env-file .env`, stop and restart the function to pick up changes.
+- Persona bootstrap (temporary). Until auth ships, the frontend auto-creates a starter conversation with a greeting on first load so a userId exists for persona overrides. Expect to see that hello conversation after a fresh DB reset; this will be removed once login/signup manages users.
+
+

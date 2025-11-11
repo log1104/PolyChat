@@ -51,6 +51,8 @@ interface ChatState {
   lockedMentorId: string | null;
   selectedModel: string;
   mentorConfigs: Record<string, MentorConfig>;
+  mentorOverrideStatus: Record<string, MentorOverrideStatus>;
+  mentorOverridesLoadedForUserId: string | null;
 }
 
 interface ChatHistoryRow {
@@ -88,6 +90,19 @@ interface MentorConfigOverride {
 
 type MentorOverrides = Record<string, MentorConfigOverride>;
 
+interface MentorOverrideResponse {
+  mentorId: string;
+  systemPrompt: string | null;
+}
+
+interface MentorOverrideStatus {
+  loading: boolean;
+  saving: boolean;
+  loaded: boolean;
+  error: string | null;
+  lastSyncedAt: string | null;
+}
+
 const defaultBaseUrl = import.meta.env.DEV
   ? "http://127.0.0.1:54321/functions/v1"
   : "";
@@ -99,6 +114,9 @@ const conversationsEndpoint = apiBaseUrl
   ? `${apiBaseUrl}/conversations`
   : "/conversations";
 const healthEndpoint = apiBaseUrl ? `${apiBaseUrl}/chat/health` : "/health";
+const mentorOverridesEndpoint = apiBaseUrl
+  ? `${apiBaseUrl}/mentor-overrides`
+  : "/mentor-overrides";
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
 const SESSION_STORAGE_KEY = "polychat.sessionId";
 const USER_STORAGE_KEY = "polychat.userId";
@@ -122,6 +140,8 @@ export const useChatStore = defineStore("chat", {
   lockedMentorId: DEFAULT_MENTOR_ID,
     selectedModel: DEFAULT_CHAT_MODEL,
     mentorConfigs: {},
+    mentorOverrideStatus: {},
+    mentorOverridesLoadedForUserId: null,
   }),
   getters: {
     orderedMessages: (state) =>
@@ -133,6 +153,16 @@ export const useChatStore = defineStore("chat", {
       if (config) return config;
       return getBaseMentorConfig(mentorId);
     },
+    mentorOverrideStatusFor:
+      (state) =>
+      (mentorId: string): MentorOverrideStatus =>
+        state.mentorOverrideStatus[mentorId] ?? {
+          loading: false,
+          saving: false,
+          loaded: false,
+          error: null,
+          lastSyncedAt: null,
+        },
   },
   actions: {
     ensureMentorConfigsLoaded() {
@@ -205,6 +235,201 @@ export const useChatStore = defineStore("chat", {
       if (overrides[mentorId]) {
         delete overrides[mentorId];
         this.writeMentorOverrides(overrides);
+      }
+    },
+    setMentorOverrideStatus(
+      mentorId: string,
+      updates: Partial<MentorOverrideStatus>,
+    ) {
+      const current = this.mentorOverrideStatus[mentorId] ?? {
+        loading: false,
+        saving: false,
+        loaded: false,
+        error: null,
+        lastSyncedAt: null,
+      };
+      this.mentorOverrideStatus = {
+        ...this.mentorOverrideStatus,
+        [mentorId]: { ...current, ...updates },
+      };
+    },
+    async fetchMentorOverrideFromServer(mentorId: string) {
+      if (!this.userId) return;
+      this.setMentorOverrideStatus(mentorId, { loading: true, error: null });
+      try {
+        const params = new URLSearchParams({
+          userId: this.userId,
+          mentorId,
+        });
+        const response = await fetch(
+          `${mentorOverridesEndpoint}?${params.toString()}`,
+          {
+            headers: supabaseAnonKey
+              ? {
+                  apikey: supabaseAnonKey,
+                  Authorization: `Bearer ${supabaseAnonKey}`,
+                }
+              : undefined,
+          },
+        );
+        if (!response.ok) {
+          const message = await extractErrorMessage(
+            response,
+            "Unable to load mentor settings",
+          );
+          throw new Error(message);
+        }
+        const data = (await response.json()) as MentorOverrideResponse;
+        if (data.systemPrompt && data.systemPrompt.trim()) {
+          this.updateMentorSystemPrompt(mentorId, data.systemPrompt);
+        } else {
+          this.resetMentorSystemPrompt(mentorId);
+        }
+        this.setMentorOverrideStatus(mentorId, {
+          error: null,
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Unable to load mentor settings";
+        this.setMentorOverrideStatus(mentorId, { error: message });
+      } finally {
+        this.setMentorOverrideStatus(mentorId, {
+          loading: false,
+          loaded: true,
+          lastSyncedAt: new Date().toISOString(),
+        });
+      }
+    },
+    async ensureServerMentorOverridesLoaded() {
+      if (!this.userId) return;
+      if (this.mentorOverridesLoadedForUserId === this.userId) {
+        return;
+      }
+      const mentorIds = getAllMentorConfigs().map((config) => config.id);
+      await Promise.all(
+        mentorIds.map((mentorId) =>
+          this.fetchMentorOverrideFromServer(mentorId).catch(() => {}),
+        ),
+      );
+      this.mentorOverridesLoadedForUserId = this.userId;
+    },
+    async saveMentorOverride(mentorId: string, systemPrompt: string) {
+      this.ensureMentorConfigsLoaded();
+      const trimmed = systemPrompt.trim();
+      if (!trimmed) {
+        await this.clearMentorOverride(mentorId);
+        return;
+      }
+
+      this.setMentorOverrideStatus(mentorId, { saving: true, error: null });
+
+      if (!this.userId) {
+        this.updateMentorSystemPrompt(mentorId, trimmed);
+        this.setMentorOverrideStatus(mentorId, {
+          saving: false,
+          loaded: true,
+          lastSyncedAt: new Date().toISOString(),
+        });
+        return;
+      }
+
+      try {
+        const response = await fetch(mentorOverridesEndpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(supabaseAnonKey
+              ? {
+                  apikey: supabaseAnonKey,
+                  Authorization: `Bearer ${supabaseAnonKey}`,
+                }
+              : {}),
+          },
+          body: JSON.stringify({
+            userId: this.userId,
+            mentorId,
+            systemPrompt: trimmed,
+          }),
+        });
+
+        if (!response.ok) {
+          const message = await extractErrorMessage(
+            response,
+            "Unable to save mentor settings",
+          );
+          throw new Error(message);
+        }
+
+        const data = (await response.json()) as MentorOverrideResponse;
+        this.updateMentorSystemPrompt(
+          data.mentorId,
+          data.systemPrompt ?? trimmed,
+        );
+        this.setMentorOverrideStatus(mentorId, {
+          saving: false,
+          loaded: true,
+          error: null,
+          lastSyncedAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Unable to save mentor settings";
+        this.setMentorOverrideStatus(mentorId, { saving: false, error: message });
+        throw error;
+      }
+    },
+    async clearMentorOverride(mentorId: string) {
+      this.ensureMentorConfigsLoaded();
+      this.setMentorOverrideStatus(mentorId, { saving: true, error: null });
+
+      if (!this.userId) {
+        this.resetMentorSystemPrompt(mentorId);
+        this.setMentorOverrideStatus(mentorId, {
+          saving: false,
+          loaded: true,
+          lastSyncedAt: new Date().toISOString(),
+        });
+        return;
+      }
+
+      try {
+        const response = await fetch(mentorOverridesEndpoint, {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            ...(supabaseAnonKey
+              ? {
+                  apikey: supabaseAnonKey,
+                  Authorization: `Bearer ${supabaseAnonKey}`,
+                }
+              : {}),
+          },
+          body: JSON.stringify({
+            userId: this.userId,
+            mentorId,
+          }),
+        });
+
+        if (!response.ok) {
+          const message = await extractErrorMessage(
+            response,
+            "Unable to reset mentor settings",
+          );
+          throw new Error(message);
+        }
+
+        this.resetMentorSystemPrompt(mentorId);
+        this.setMentorOverrideStatus(mentorId, {
+          saving: false,
+          loaded: true,
+          error: null,
+          lastSyncedAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Unable to reset mentor settings";
+        this.setMentorOverrideStatus(mentorId, { saving: false, error: message });
+        throw error;
       }
     },
     /**
@@ -343,6 +568,7 @@ export const useChatStore = defineStore("chat", {
         this.userId = data.userId;
         this.activeMentor = data.mentorId;
         this.lockedMentorId = data.mentorId;
+        this.ensureServerMentorOverridesLoaded().catch(() => {});
 
         this.messages = data.history.map((item) => ({
           id: item.id,
@@ -413,7 +639,7 @@ export const useChatStore = defineStore("chat", {
         this.conversationsLoading = false;
       }
     },
-    async startNewConversation(mentorId?: string) {
+    async startNewConversation(mentorId?: string, options?: { bootstrap?: boolean }) {
       this.ensureMentorConfigsLoaded();
       const resolvedMentorId = mentorId ?? this.activeMentor ?? DEFAULT_MENTOR_ID;
       const safeMentorId = hasMentor(resolvedMentorId)
@@ -437,6 +663,7 @@ export const useChatStore = defineStore("chat", {
           userId: this.userId ?? undefined,
           mentorId: safeMentorId,
           systemPrompt: mentorConfig.systemPrompt,
+          bootstrap: options?.bootstrap ?? false,
         }),
       });
       if (!response.ok) throw new Error("Unable to start new conversation");
@@ -446,10 +673,14 @@ export const useChatStore = defineStore("chat", {
       this.activeMentor = conv.mentorId;
       this.lockedMentorId = conv.mentorId;
       this.userId = conv.userId;
+      this.ensureServerMentorOverridesLoaded().catch(() => {});
       this.messages = [];
       // Update list and persist ids
       await this.loadConversations();
       this.persistSession();
+      if (options?.bootstrap && this.sessionId) {
+        await this.fetchExistingConversation(this.sessionId).catch(() => {});
+      }
     },
     async selectConversation(conversationId: string) {
       // Load messages for an existing conversation via existing method
@@ -486,6 +717,7 @@ export const useChatStore = defineStore("chat", {
         this.userId = data.userId;
         this.activeMentor = data.mentorId;
   this.lockedMentorId = data.mentorId;
+        this.ensureServerMentorOverridesLoaded().catch(() => {});
 
         this.messages = data.history.map((item) => ({
           id: item.id,
@@ -544,6 +776,10 @@ export const useChatStore = defineStore("chat", {
         this.userId = storedUser;
       }
 
+      if (!this.sessionId || !this.userId) {
+        this.bootstrapInitialSession().catch(() => {});
+      }
+
       if (this.sessionId) {
         this.fetchExistingConversation(this.sessionId).catch(() => {
           // handled in fetchExistingConversation
@@ -552,9 +788,18 @@ export const useChatStore = defineStore("chat", {
       // Also load conversation list once userId is known (may be set by fetchExistingConversation)
       if (this.userId) {
         this.loadConversations().catch(() => {});
+        this.ensureServerMentorOverridesLoaded().catch(() => {});
       }
       // Kick off an API health check on load
       this.checkHealth().catch(() => {});
+    },
+    async bootstrapInitialSession() {
+      if (this.sessionId || this.userId) return;
+      try {
+        await this.startNewConversation(undefined, { bootstrap: true });
+      } catch (error) {
+        console.warn("Failed to bootstrap initial conversation", error);
+      }
     },
     persistSession() {
       if (typeof window === "undefined") return;
@@ -570,6 +815,7 @@ export const useChatStore = defineStore("chat", {
       window.localStorage.removeItem(SESSION_STORAGE_KEY);
       if (options?.clearUser !== false) {
         window.localStorage.removeItem(USER_STORAGE_KEY);
+        this.mentorOverridesLoadedForUserId = null;
       }
     },
     async deleteConversation(conversationId: string) {
@@ -604,4 +850,20 @@ export const useChatStore = defineStore("chat", {
     },
   },
 });
+
+async function extractErrorMessage(response: Response, fallback: string) {
+  let message = fallback;
+  try {
+    const payload = await response.json();
+    if (payload && typeof payload === "object" && "message" in payload) {
+      const extracted = (payload as { message?: string }).message;
+      if (typeof extracted === "string" && extracted.trim()) {
+        message = extracted.trim();
+      }
+    }
+  } catch {
+    // Ignore parse failures and keep fallback.
+  }
+  return message;
+}
 

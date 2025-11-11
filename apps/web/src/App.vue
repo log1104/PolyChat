@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ChatWindow from "./components/ChatWindow.vue";
+import { getBaseMentorConfig } from "./lib/mentorConfigs";
 import { useChatStore } from "./stores/chat";
 import type { ChatFile } from "./stores/chat";
 
@@ -52,6 +53,66 @@ const currentMentorOption = computed(() =>
 );
 
 const mentorPersonaDraft = ref("");
+
+const personaStatus = computed(() =>
+  mentorSettingsId.value
+    ? chatStore.mentorOverrideStatusFor(mentorSettingsId.value)
+    : null,
+);
+const personaIsSaving = computed(() => personaStatus.value?.saving ?? false);
+const personaStatusMessage = computed(() => {
+  const status = personaStatus.value;
+  if (status?.error) return status.error;
+  if (personaIsSaving.value) return "Saving...";
+  const activePrompt = currentMentorOption.value?.prompt?.trim() ?? "";
+  if (mentorPersonaDraft.value.trim() !== activePrompt) {
+    return "Unsaved changes";
+  }
+  if (
+    activePrompt &&
+    activePrompt !==
+      (currentMentorOption.value
+        ? getBaseMentorConfig(currentMentorOption.value.id).systemPrompt ?? ""
+        : "")
+  ) {
+    return "Custom prompt in use";
+  }
+  return status?.loaded ? "Using default prompt" : "Ready to edit";
+});
+const personaCanSave = computed(() => {
+  if (!mentorSettingsId.value || personaIsSaving.value) return false;
+  const current = currentMentorOption.value?.prompt ?? "";
+  return mentorPersonaDraft.value.trim() !== current.trim();
+});
+const personaCanReset = computed(() => {
+  if (!mentorSettingsId.value || personaIsSaving.value) return false;
+  const defaultPrompt = mentorSettingsId.value
+    ? getBaseMentorConfig(mentorSettingsId.value).systemPrompt ?? ""
+    : "";
+  const currentPrompt = currentMentorOption.value?.prompt ?? "";
+  return currentPrompt.trim() !== defaultPrompt.trim();
+});
+
+const savePersonaSetting = async () => {
+  if (!mentorSettingsId.value || !personaCanSave.value) return;
+  try {
+    await chatStore.saveMentorOverride(
+      mentorSettingsId.value,
+      mentorPersonaDraft.value,
+    );
+  } catch {
+    // status message already reflects error
+  }
+};
+
+const resetPersonaSetting = async () => {
+  if (!mentorSettingsId.value || !personaCanReset.value) return;
+  try {
+    await chatStore.clearMentorOverride(mentorSettingsId.value);
+  } catch {
+    // status message already reflects error
+  }
+};
 
 const ensureMentorSelection = () => {
   if (!mentorSettingsId.value) {
@@ -459,9 +520,28 @@ watch(
                   v-model="mentorPersonaDraft"
                   class="mt-3 h-48 w-full resize-none rounded-2xl border border-white/20 bg-slate-900/60 p-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-white/30"
                 ></textarea>
-                <p class="mt-2 text-xs text-slate-500">
-                  Editing is draft-only for now. Persistent save will arrive with the config API.
-                </p>
+                <div class="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+                  <span>{{ personaStatusMessage }}</span>
+                  <div class="flex gap-2">
+                    <button
+                      type="button"
+                      class="rounded-full border border-white/30 px-4 py-1 text-[11px] font-semibold text-white transition hover:border-white/50 disabled:cursor-not-allowed disabled:opacity-50"
+                      :disabled="!personaCanReset"
+                      @click="resetPersonaSetting"
+                    >
+                      Reset
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded-full bg-white px-4 py-1 text-[11px] font-semibold text-slate-900 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      :disabled="!personaCanSave"
+                      @click="savePersonaSetting"
+                    >
+                      <span v-if="personaIsSaving">Saving…</span>
+                      <span v-else>Save</span>
+                    </button>
+                  </div>
+                </div>
               </div>
               <div class="rounded-2xl border border-dashed border-white/15 bg-white/5 p-5 text-sm text-slate-400">
                 Runtime & tools placeholders will appear here once configurable.
