@@ -125,7 +125,10 @@ const ensureMentorSelection = () => {
     (mentor) => mentor.id === mentorSettingsId.value,
   );
   if (!active && mentorOptions.value.length > 0) {
-    mentorSettingsId.value = mentorOptions.value[0].id;
+    const firstMentor = mentorOptions.value[0];
+    if (firstMentor) {
+      mentorSettingsId.value = firstMentor.id;
+    }
   }
 };
 
