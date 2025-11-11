@@ -48,7 +48,15 @@ jobs:
 
       - name: Link Supabase project
         if: env.SUPABASE_PROJECT_REF != ''
-        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -e
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "SUPABASE_DB_PASSWORD not set; cannot link project."
+            exit 1
+          fi
+          supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
 
       - name: Push database changes to remote
         if: env.SUPABASE_PROJECT_REF != ''
