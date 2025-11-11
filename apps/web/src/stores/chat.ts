@@ -6,6 +6,7 @@ import {
   type MentorConfig,
 } from "../lib/mentorConfigs";
 import { DEFAULT_CHAT_MODEL } from "../../../../shared/chatModel";
+import { useAuthStore } from "./auth";
 
 export type ChatRole = "user" | "assistant" | "system";
 
@@ -118,10 +119,26 @@ const mentorOverridesEndpoint = apiBaseUrl
   ? `${apiBaseUrl}/mentor-overrides`
   : "/mentor-overrides";
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
-const SESSION_STORAGE_KEY = "polychat.sessionId";
-const USER_STORAGE_KEY = "polychat.userId";
 const MENTOR_OVERRIDES_STORAGE_KEY = "polychat.mentorOverrides";
 const DEFAULT_MENTOR_ID = "general";
+
+function buildFunctionHeaders(options?: { json?: boolean }) {
+  const authStore = useAuthStore();
+  const headers: Record<string, string> = {};
+  if (options?.json) {
+    headers["Content-Type"] = "application/json";
+  }
+  if (supabaseAnonKey) {
+    headers["apikey"] = supabaseAnonKey;
+  }
+  const token = authStore.accessToken;
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  } else if (supabaseAnonKey) {
+    headers["Authorization"] = `Bearer ${supabaseAnonKey}`;
+  }
+  return headers;
+}
 
 export const useChatStore = defineStore("chat", {
   state: (): ChatState => ({
@@ -264,12 +281,7 @@ export const useChatStore = defineStore("chat", {
         const response = await fetch(
           `${mentorOverridesEndpoint}?${params.toString()}`,
           {
-            headers: supabaseAnonKey
-              ? {
-                  apikey: supabaseAnonKey,
-                  Authorization: `Bearer ${supabaseAnonKey}`,
-                }
-              : undefined,
+            headers: buildFunctionHeaders(),
           },
         );
         if (!response.ok) {
@@ -336,15 +348,7 @@ export const useChatStore = defineStore("chat", {
       try {
         const response = await fetch(mentorOverridesEndpoint, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(supabaseAnonKey
-              ? {
-                  apikey: supabaseAnonKey,
-                  Authorization: `Bearer ${supabaseAnonKey}`,
-                }
-              : {}),
-          },
+          headers: buildFunctionHeaders({ json: true }),
           body: JSON.stringify({
             userId: this.userId,
             mentorId,
@@ -395,15 +399,7 @@ export const useChatStore = defineStore("chat", {
       try {
         const response = await fetch(mentorOverridesEndpoint, {
           method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-            ...(supabaseAnonKey
-              ? {
-                  apikey: supabaseAnonKey,
-                  Authorization: `Bearer ${supabaseAnonKey}`,
-                }
-              : {}),
-          },
+          headers: buildFunctionHeaders({ json: true }),
           body: JSON.stringify({
             userId: this.userId,
             mentorId,
@@ -497,6 +493,10 @@ export const useChatStore = defineStore("chat", {
     },
     async sendMessage(content: string, files: ChatFile[] = []) {
       if (!content.trim()) return;
+      if (!this.userId) {
+        this.error = "Please sign in to continue.";
+        return;
+      }
 
       this.error = null;
 
@@ -511,8 +511,7 @@ export const useChatStore = defineStore("chat", {
           : DEFAULT_MENTOR_ID;
         this.activeMentor = safeMentor ?? this.activeMentor ?? DEFAULT_MENTOR_ID;
       } else {
-        // Manual mode: use locked mentor
-  this.activeMentor = this.lockedMentorId ?? DEFAULT_MENTOR_ID;
+        this.activeMentor = this.lockedMentorId ?? DEFAULT_MENTOR_ID;
       }
 
       const now = new Date().toISOString();
@@ -538,21 +537,13 @@ export const useChatStore = defineStore("chat", {
 
         const response = await fetch(chatEndpoint, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(supabaseAnonKey
-              ? {
-                  apikey: supabaseAnonKey,
-                  Authorization: `Bearer ${supabaseAnonKey}`,
-                }
-              : {}),
-          },
+          headers: buildFunctionHeaders({ json: true }),
           body: JSON.stringify({
             message: content,
             files,
             mentorId: this.activeMentor,
             sessionId: this.sessionId ?? undefined,
-            userId: this.userId ?? undefined,
+            userId: this.userId,
             model: this.selectedModel,
             systemPrompt,
           }),
@@ -580,7 +571,6 @@ export const useChatStore = defineStore("chat", {
           model: item.model,
         }));
 
-        this.persistSession();
         // Refresh conversations so History reflects latest changes
         // Safe to fire-and-forget; errors are non-fatal
         this.loadConversations().catch(() => {});
@@ -598,12 +588,7 @@ export const useChatStore = defineStore("chat", {
     async checkHealth() {
       try {
         const res = await fetch(healthEndpoint, {
-          headers: supabaseAnonKey
-            ? {
-                apikey: supabaseAnonKey,
-                Authorization: `Bearer ${supabaseAnonKey}`,
-              }
-            : undefined,
+          headers: buildFunctionHeaders(),
         });
         this.apiOnline = res.ok;
       } catch {
@@ -624,12 +609,7 @@ export const useChatStore = defineStore("chat", {
         const response = await fetch(
           `${conversationsEndpoint}?${params.toString()}`,
           {
-            headers: supabaseAnonKey
-              ? {
-                  apikey: supabaseAnonKey,
-                  Authorization: `Bearer ${supabaseAnonKey}`,
-                }
-              : undefined,
+            headers: buildFunctionHeaders(),
           },
         );
         if (!response.ok) throw new Error("Unable to load conversations");
@@ -640,6 +620,9 @@ export const useChatStore = defineStore("chat", {
       }
     },
     async startNewConversation(mentorId?: string, options?: { bootstrap?: boolean }) {
+      if (!this.userId) {
+        throw new Error("Please sign in to start a new conversation.");
+      }
       this.ensureMentorConfigsLoaded();
       const resolvedMentorId = mentorId ?? this.activeMentor ?? DEFAULT_MENTOR_ID;
       const safeMentorId = hasMentor(resolvedMentorId)
@@ -650,17 +633,9 @@ export const useChatStore = defineStore("chat", {
 
       const response = await fetch(conversationsEndpoint, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(supabaseAnonKey
-            ? {
-                apikey: supabaseAnonKey,
-                Authorization: `Bearer ${supabaseAnonKey}`,
-              }
-            : {}),
-        },
+        headers: buildFunctionHeaders({ json: true }),
         body: JSON.stringify({
-          userId: this.userId ?? undefined,
+          userId: this.userId,
           mentorId: safeMentorId,
           systemPrompt: mentorConfig.systemPrompt,
           bootstrap: options?.bootstrap ?? false,
@@ -675,10 +650,11 @@ export const useChatStore = defineStore("chat", {
       this.userId = conv.userId;
       this.ensureServerMentorOverridesLoaded().catch(() => {});
       this.messages = [];
-      // Update list and persist ids
+      // Update list and hydrate current conversation
       await this.loadConversations();
-      this.persistSession();
       if (options?.bootstrap && this.sessionId) {
+        await this.fetchExistingConversation(this.sessionId).catch(() => {});
+      } else if (this.sessionId) {
         await this.fetchExistingConversation(this.sessionId).catch(() => {});
       }
     },
@@ -697,12 +673,7 @@ export const useChatStore = defineStore("chat", {
         }
 
         const response = await fetch(`${chatEndpoint}?${params.toString()}`, {
-          headers: supabaseAnonKey
-            ? {
-                apikey: supabaseAnonKey,
-                Authorization: `Bearer ${supabaseAnonKey}`,
-              }
-            : undefined,
+          headers: buildFunctionHeaders(),
         });
 
         if (!response.ok) {
@@ -735,7 +706,6 @@ export const useChatStore = defineStore("chat", {
       } catch (error) {
         this.error = error instanceof Error ? error.message : "Unknown error";
         this.apiOnline = false; // network/API issue
-        this.clearPersistedSession();
       } finally {
         this.isSending = false;
       }
@@ -758,79 +728,33 @@ export const useChatStore = defineStore("chat", {
       this.messages = [];
       this.sessionId = null;
       this.error = null;
-  this.setMentor(DEFAULT_MENTOR_ID);
-      this.clearPersistedSession({ clearUser: false });
+      this.setMentor(DEFAULT_MENTOR_ID);
     },
-    initializeFromStorage() {
-      if (typeof window === "undefined") return;
-
+    async initializeForUser(userId: string) {
+      this.userId = userId;
       this.ensureMentorConfigsLoaded();
-
-      const storedSession = window.localStorage.getItem(SESSION_STORAGE_KEY);
-      const storedUser = window.localStorage.getItem(USER_STORAGE_KEY);
-
-      if (storedSession) {
-        this.sessionId = storedSession;
+      await this.loadConversations();
+      if (!this.sessionId && this.conversations.length) {
+        await this.fetchExistingConversation(this.conversations[0].id).catch(
+          () => {},
+        );
       }
-      if (storedUser) {
-        this.userId = storedUser;
-      }
-
-      if (!this.sessionId || !this.userId) {
-        this.bootstrapInitialSession().catch(() => {});
-      }
-
-      if (this.sessionId) {
-        this.fetchExistingConversation(this.sessionId).catch(() => {
-          // handled in fetchExistingConversation
-        });
-      }
-      // Also load conversation list once userId is known (may be set by fetchExistingConversation)
-      if (this.userId) {
-        this.loadConversations().catch(() => {});
-        this.ensureServerMentorOverridesLoaded().catch(() => {});
-      }
-      // Kick off an API health check on load
+      this.ensureServerMentorOverridesLoaded().catch(() => {});
       this.checkHealth().catch(() => {});
     },
-    async bootstrapInitialSession() {
-      if (this.sessionId || this.userId) return;
-      try {
-        await this.startNewConversation(undefined, { bootstrap: true });
-      } catch (error) {
-        console.warn("Failed to bootstrap initial conversation", error);
-      }
-    },
-    persistSession() {
-      if (typeof window === "undefined") return;
-      if (this.sessionId) {
-        window.localStorage.setItem(SESSION_STORAGE_KEY, this.sessionId);
-      }
-      if (this.userId) {
-        window.localStorage.setItem(USER_STORAGE_KEY, this.userId);
-      }
-    },
-    clearPersistedSession(options?: { clearUser?: boolean }) {
-      if (typeof window === "undefined") return;
-      window.localStorage.removeItem(SESSION_STORAGE_KEY);
-      if (options?.clearUser !== false) {
-        window.localStorage.removeItem(USER_STORAGE_KEY);
-        this.mentorOverridesLoadedForUserId = null;
-      }
+    handleUserSignedOut() {
+      this.userId = null;
+      this.sessionId = null;
+      this.messages = [];
+      this.conversations = [];
+      this.error = null;
+      this.setMentor(DEFAULT_MENTOR_ID);
     },
     async deleteConversation(conversationId: string) {
       if (!conversationId) return;
       const response = await fetch(conversationsEndpoint, {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          ...(supabaseAnonKey
-            ? {
-                apikey: supabaseAnonKey,
-                Authorization: `Bearer ${supabaseAnonKey}`,
-              }
-            : {}),
-        },
+        headers: buildFunctionHeaders({ json: true }),
         body: JSON.stringify({
           userId: this.userId,
           conversationId,
@@ -846,7 +770,6 @@ export const useChatStore = defineStore("chat", {
       }
 
       await this.loadConversations();
-      this.persistSession();
     },
   },
 });

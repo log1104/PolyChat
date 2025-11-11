@@ -96,6 +96,12 @@ Environment variables are split per-package for better isolation in the monorepo
 - For scripts or Supabase functions, use root `.env` or per-script env files.
 - Supabase functions read from `.env` in the repo root when served with `--env-file .env`.
 
+### 5.5 Google OAuth (Supabase Auth)
+- Enable Google in Supabase Dashboard → Authentication → Providers. Configure both production and `http://127.0.0.1:54321/auth/v1/callback` redirect URLs.
+- Grab Google OAuth client ID/secret from Google Cloud Console and paste into Supabase.
+- No extra frontend env vars are needed beyond `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY`, but make sure Vercel and GitHub secrets use the same values.
+- After changing OAuth settings, redeploy Supabase edge functions (`supabase functions deploy chat mentor-overrides conversations`) so the latest code runs with verified JWTs.
+
 Never commit `.env*` files. In Vercel, configure vars via Project Settings.
 
 ## 6. Local Supabase Setup

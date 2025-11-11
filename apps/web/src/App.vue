@@ -3,9 +3,11 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ChatWindow from "./components/ChatWindow.vue";
 import { getBaseMentorConfig } from "./lib/mentorConfigs";
 import { useChatStore } from "./stores/chat";
+import { useAuthStore } from "./stores/auth";
 import type { ChatFile } from "./stores/chat";
 
 const chatStore = useChatStore();
+const authStore = useAuthStore();
 
 // Removed unused MentorBadge import and mentors array
 
@@ -16,6 +18,15 @@ const activeMentor = computed(() => chatStore.activeMentor);
 const isSending = computed(() => chatStore.isSending);
 const error = computed(() => chatStore.error);
 const activeConversationId = computed(() => chatStore.sessionId);
+const authLoading = computed(() => authStore.initializing);
+const currentUser = computed(() => authStore.user);
+const isAuthenticated = computed(() => authStore.isAuthenticated);
+const currentUserLabel = computed(
+  () =>
+    currentUser.value?.email ??
+    currentUser.value?.user_metadata?.full_name ??
+    "Signed in user",
+);
 
 // Collapsible left sidebar (drawer)
 const isSidebarExpanded = ref(true);
@@ -225,14 +236,29 @@ const requestDeleteConversation = async (conversationId: string) => {
   }
 };
 
-onMounted(() => {
-  chatStore.initializeFromStorage();
-  // Load conversation list after initialization completes
-  // If userId becomes available later, the store will load conversations itself
-  // History list can be loaded lazily when we add the dedicated panel; not needed for sidebar toggle
-  // Also proactively check API health on app mount
-  chatStore.checkHealth().catch(() => {});
+const signInWithGoogle = async () => {
+  try {
+    await authStore.signInWithGoogle();
+  } catch (error) {
+    chatStore.error =
+      error instanceof Error
+        ? error.message
+        : "Unable to sign in with Google.";
+  }
+};
 
+const signOut = async () => {
+  try {
+    await authStore.signOut();
+    chatStore.handleUserSignedOut();
+  } catch (error) {
+    chatStore.error =
+      error instanceof Error ? error.message : "Unable to sign out.";
+  }
+};
+
+onMounted(() => {
+  authStore.initialize().catch(() => {});
   if (typeof window === "undefined") return;
 
   const savedTheme = localStorage.getItem("polychat.theme") as
@@ -254,6 +280,22 @@ onMounted(() => {
   }
   systemMediaQuery.addEventListener("change", handleSystemChange);
 });
+
+watch(
+  () => authStore.user?.id,
+  (userId) => {
+    if (userId) {
+      chatStore
+        .initializeForUser(userId)
+        .catch(() => {
+          chatStore.error = "Unable to load your conversations.";
+        });
+    } else {
+      chatStore.handleUserSignedOut();
+    }
+  },
+  { immediate: true },
+);
 
 onBeforeUnmount(() => {
   if (systemMediaQuery) {
@@ -306,6 +348,39 @@ watch(
   <main
     class="min-h-screen bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-50 transition-colors"
   >
+    <div
+      v-if="authLoading"
+      class="flex min-h-screen items-center justify-center px-4 text-center text-sm text-slate-500 dark:text-slate-400"
+    >
+      Checking your session…
+    </div>
+    <div
+      v-else-if="!isAuthenticated"
+      class="flex min-h-screen items-center justify-center bg-gradient-to-b from-slate-50 to-white dark:from-slate-900 dark:to-slate-950 px-4"
+    >
+      <div
+        class="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 text-left shadow-xl dark:border-slate-700 dark:bg-slate-900"
+      >
+        <p class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          Welcome to PolyChat
+        </p>
+        <h1 class="mt-2 text-2xl font-bold text-slate-900 dark:text-white">
+          Sign in to continue
+        </h1>
+        <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
+          Use your Google account to keep conversations in sync.
+        </p>
+        <button
+          type="button"
+          class="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
+          @click="signInWithGoogle"
+        >
+          <span aria-hidden="true">🔐</span>
+          Continue with Google
+        </button>
+      </div>
+    </div>
+    <template v-else>
     <!-- API health banner -->
     <div
       v-if="chatStore.apiOnline === false"
@@ -352,6 +427,23 @@ watch(
             <span aria-hidden="true" class="text-lg">⚙</span>
           </button>
         </header>
+
+        <div
+          v-if="isSidebarExpanded"
+          class="flex w-full flex-col gap-3 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-300"
+        >
+          <span class="font-semibold text-slate-400 dark:text-slate-500">Signed in</span>
+          <span class="truncate text-sm font-medium text-slate-900 dark:text-white">
+            {{ currentUserLabel }}
+          </span>
+          <button
+            type="button"
+            class="self-start rounded-lg border border-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-500"
+            @click="signOut"
+          >
+            Sign out
+          </button>
+        </div>
 
         <nav v-if="isSidebarExpanded" class="space-y-1" aria-label="Quick actions">
           <button
@@ -698,6 +790,7 @@ watch(
         </section>
       </div>
     </div>
+    </template>
   </main>
 </template>
 
