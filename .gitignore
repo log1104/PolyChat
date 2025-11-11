@@ -9,6 +9,7 @@ dist/
 apps/*/.env
 apps/*/.env.*
 !apps/*/.env.example
+supabase/.env
 
 # build outputs
 

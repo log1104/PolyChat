@@ -64,10 +64,15 @@ Run `pnpm install` at the root after cloning. If pnpm is not globally available,
 
 Environment variables are split per-package for better isolation in the monorepo:
 
-### 5.1 Root .env (Shared/Optional)
-- Copy `.env.example` ? `.env` (if needed for shared vars; currently empty).
+### 5.1 Root .env & Supabase .env
+- Copy `.env.example` → `.env`. Keep shared knobs here (chat timeout, model overrides) plus any keys the helper script should export to shell processes.
+- Create `supabase/.env` (copy `supabase/.env.example` if present) for variables that **must** be visible to the Supabase Docker stack (Edge Functions, storage, etc.). This file is also `.gitignore`d. Example:
+  ```
+  OPENROUTER_API_KEY=sk-...
+  OPENAI_API_KEY=
+  ```
 - The default chat model lives in `shared/chatModel.ts`, keeping the UI selector and Edge Function fallback synchronized.
-- No secrets here—only placeholders or shared non-sensitive vars.
+- Never check real secrets into git; only the `*.env.example` templates stay tracked.
 
 ### 5.2 Web App (apps/web/.env.local)
 - Copy `apps/web/.env.example` ? `apps/web/.env.local`.
@@ -95,11 +100,27 @@ Never commit `.env*` files. In Vercel, configure vars via Project Settings.
 
 ## 6. Local Supabase Setup
 
+### 6.1 Preferred Helper Script
+Run everything (Supabase stack, edge functions, frontend) with:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/start-local.ps1 -WithFrontend
+```
+What it does:
+- Loads `.env` and `apps/api/.env` into the shell.
+- Starts Docker containers (`supabase start`) unless `-SkipSupabaseStart` is passed.
+- Launches `supabase functions serve chat` and `mentor-overrides` with `--env-file .env`.
+- Starts `pnpm --filter @polychat/web dev`.
+- Optional `-ResetSupabaseContainers` flag stops/prunes containers before starting (handy when Docker is wedged).
+
+The script prints the URLs and opens separate PowerShell windows for each process. Close those windows (or press `Ctrl+C` inside them) to stop the services cleanly.
+
+### 6.2 Manual Steps (if not using the helper)
+
 1. Initialise (first run only):
    ```bash
    supabase init
    ```
-2. Start services:
+2. Start services (after setting `supabase/.env`):
    ```bash
    supabase start
    ```
@@ -132,10 +153,8 @@ pnpm --filter @polychat/web dev
 Launches Vite on `http://localhost:5173`.
 
 ### 8.2 Supabase Edge Function (chat API)
-```bash
-supabase functions serve chat --env-file .env
-```
-Serves the chat endpoint at `http://127.0.0.1:54321/functions/v1/chat`.
+- **Recommended:** let the helper script launch `supabase functions serve chat --no-verify-jwt --watch --env-file .env`.
+- **Manual:** run the command above yourself after exporting `.env`, or rely on the Docker stack (`supabase start`) which serves the function at `http://127.0.0.1:54321/functions/v1/chat`.
 
 ### 8.3 Optional Express Gateway
 ```bash
@@ -191,7 +210,7 @@ Runs frontend + Express gateway in parallel (Supabase function still recommended
 - Windows line endings / BOM. Creating TOML/JSON with BOM or mixing CRLF/LF can break parsers; save as UTF-8 without BOM when possible.
 - Vercel static output. Either set project Output Directory to `apps/web/dist` or copy to root `dist/` in `vercel.json`. Commit `pnpm-lock.yaml` so Vercel uses pnpm reliably.
 - ESLint v9 flat config. Use `eslint.config.js` (flat) instead of legacy `.eslintrc.*`; align TypeScript parser options or lint will fail.
-- Env reload. After editing `.env` used by `supabase functions serve --env-file .env`, stop and restart the function to pick up changes.
+- Env reload. After editing `.env` (or `supabase/.env`) used by the helper/edge runtime, stop and restart the relevant process so it picks up the new values.
 - Persona bootstrap (temporary). Until auth ships, the frontend auto-creates a starter conversation with a greeting on first load so a userId exists for persona overrides. Expect to see that hello conversation after a fresh DB reset; this will be removed once login/signup manages users.
 
 
