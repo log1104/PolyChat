@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import ChatWindow from "./components/ChatWindow.vue";
 import { getBaseMentorConfig } from "./lib/mentorConfigs";
 import { useChatStore } from "./stores/chat";
@@ -49,6 +49,54 @@ const themeOptions = [
   { id: "light" as const, label: "Light" },
   { id: "dark" as const, label: "Dark" },
 ];
+
+type UiModel = {
+  id: string;
+  label: string;
+};
+
+const modelOptions = ref<UiModel[]>([
+  { id: "openai/gpt-4o-mini", label: "OpenAI GPT-4o Mini" },
+  { id: "anthropic/claude-3.5-sonnet", label: "Claude 3.5 Sonnet" },
+  { id: "google/gemini-2.0-flash", label: "Gemini 2.0 Flash" },
+]);
+
+const modelCount = computed(() => modelOptions.value.length);
+const activeModelId = ref(modelOptions.value[0]?.id ?? "");
+const isModelFormVisible = ref(false);
+const modelForm = reactive({ id: "", label: "" });
+
+const selectedModel = computed(() =>
+  modelOptions.value.find((model) => model.id === activeModelId.value) ?? null,
+);
+
+const toggleModelForm = () => {
+  isModelFormVisible.value = !isModelFormVisible.value;
+  if (!isModelFormVisible.value) {
+    modelForm.id = "";
+    modelForm.label = "";
+  }
+};
+
+const submitModelForm = () => {
+  // TODO: implement model creation logic
+  toggleModelForm();
+};
+
+const removeModel = (modelId: string) => {
+  void modelId;
+  // TODO: implement model removal logic
+};
+
+watch(
+  modelOptions,
+  (next) => {
+    if (!next.find((model) => model.id === activeModelId.value)) {
+      activeModelId.value = next[0]?.id ?? "";
+    }
+  },
+  { deep: true },
+);
 
 if (typeof window !== "undefined") {
   systemMediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -752,6 +800,107 @@ watch(
                     {{ option.label }}
                   </button>
                 </div>
+              </div>
+            </div>
+            <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div class="flex flex-col gap-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-semibold text-white">LLM Models</span>
+                    <span class="rounded-full border border-white/15 px-2 py-0.5 text-[11px] text-slate-300">
+                      {{ modelCount }}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    class="rounded-full border border-white/20 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-white/40 hover:text-white"
+                    @click="toggleModelForm"
+                  >
+                    {{ isModelFormVisible ? "Cancel" : "Add" }}
+                  </button>
+                </div>
+                <p class="text-xs text-slate-400">
+                  Choose your active model and curate the list shown in chat.
+                </p>
+                <label class="text-xs font-medium uppercase tracking-wide text-slate-400">
+                  Active model
+                  <select
+                    v-model="activeModelId"
+                    class="mt-2 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-sm text-slate-100 transition focus:border-white/40 focus:outline-none focus:ring-2 focus:ring-white/30"
+                  >
+                    <option v-for="option in modelOptions" :key="option.id" :value="option.id">
+                      {{ option.label }}
+                    </option>
+                  </select>
+                </label>
+                <transition name="settings-overlay">
+                  <div
+                    v-if="isModelFormVisible"
+                    class="rounded-2xl border border-dashed border-white/15 bg-white/5 p-4 text-sm text-slate-200"
+                  >
+                    <form class="space-y-3" @submit.prevent="submitModelForm">
+                      <label class="block text-xs font-medium uppercase tracking-wide text-slate-400">
+                        Model ID
+                        <input
+                          v-model="modelForm.id"
+                          type="text"
+                          placeholder="provider/model-name"
+                          class="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-white/35 focus:outline-none focus:ring-2 focus:ring-white/25"
+                        />
+                      </label>
+                      <label class="block text-xs font-medium uppercase tracking-wide text-slate-400">
+                        Display name
+                        <input
+                          v-model="modelForm.label"
+                          type="text"
+                          placeholder="Readable label"
+                          class="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-white/35 focus:outline-none focus:ring-2 focus:ring-white/25"
+                        />
+                      </label>
+                      <div class="flex justify-end gap-2 text-xs">
+                        <button
+                          type="button"
+                          class="rounded-full border border-white/15 px-3 py-1 text-slate-200 transition hover:border-white/30 hover:text-white"
+                          @click="toggleModelForm"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          class="rounded-full border border-white/15 px-3 py-1 font-semibold text-slate-900 transition"
+                          :class="modelForm.id && modelForm.label ? 'bg-white hover:bg-white/90' : 'bg-white/40 text-slate-500'"
+                          :disabled="!modelForm.id || !modelForm.label"
+                        >
+                          Save
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </transition>
+                <div
+                  v-if="selectedModel"
+                  class="rounded-2xl border border-white/10 bg-white/5 p-4"
+                >
+                  <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p class="text-sm font-semibold text-white">{{ selectedModel.label }}</p>
+                      <p class="text-[11px] text-slate-400">{{ selectedModel.id }}</p>
+                    </div>
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-1 rounded-full border border-white/20 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-rose-300 hover:text-rose-200"
+                      @click="removeModel(selectedModel.id)"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <p class="mt-3 text-xs text-slate-400">
+                    This is the model currently active in chat. Removing it will fall back to the next available option.
+                  </p>
+                </div>
+                <p v-else class="rounded-xl border border-dashed border-white/15 bg-white/5 px-3 py-2 text-center text-xs text-slate-400">
+                  No models yet. Add one to get started.
+                </p>
               </div>
             </div>
           </div>
