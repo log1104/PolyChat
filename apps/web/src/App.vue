@@ -43,6 +43,47 @@ const mentorSettingsId = ref<string>("");
 const theme = ref<"light" | "dark" | "system">("system");
 const systemPrefersDark = ref(false);
 let systemMediaQuery: MediaQueryList | null = null;
+const themeMenuOpen = ref(false);
+const themeButton = ref<HTMLButtonElement | null>(null);
+const themeMenu = ref<HTMLDivElement | null>(null);
+
+const themeOptions = [
+  { id: "system" as const, label: "System", description: "Match OS setting" },
+  { id: "light" as const, label: "Light", description: "Bright surfaces" },
+  { id: "dark" as const, label: "Dark", description: "Low-light friendly" },
+];
+
+const activeThemeOption = computed(
+  () => themeOptions.find((option) => option.id === theme.value) ?? themeOptions[0],
+);
+const themeSummary = computed(() => activeThemeOption.value.label);
+
+const closeThemeMenu = () => {
+  themeMenuOpen.value = false;
+};
+
+const toggleThemeMenu = () => {
+  themeMenuOpen.value = !themeMenuOpen.value;
+};
+
+const selectTheme = (nextTheme: "light" | "dark" | "system") => {
+  setTheme(nextTheme);
+  closeThemeMenu();
+};
+
+const handleThemeKeydown = (event: KeyboardEvent) => {
+  if (event.key === "Escape") {
+    closeThemeMenu();
+  }
+};
+
+const handleThemeClickAway = (event: MouseEvent) => {
+  if (!themeMenuOpen.value) return;
+  const target = event.target as Node;
+  if (themeButton.value && themeButton.value.contains(target)) return;
+  if (themeMenu.value && themeMenu.value.contains(target)) return;
+  closeThemeMenu();
+};
 
 if (typeof window !== "undefined") {
   systemMediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -159,6 +200,7 @@ const openGeneralSettings = () => {
 };
 
 const closeGeneralSettings = () => {
+  closeThemeMenu();
   isGeneralSettingsOpen.value = false;
 };
 
@@ -279,6 +321,9 @@ onMounted(() => {
     systemPrefersDark.value = systemMediaQuery.matches;
   }
   systemMediaQuery.addEventListener("change", handleSystemChange);
+
+  document.addEventListener("click", handleThemeClickAway);
+  document.addEventListener("keydown", handleThemeKeydown);
 });
 
 watch(
@@ -300,6 +345,10 @@ watch(
 onBeforeUnmount(() => {
   if (systemMediaQuery) {
     systemMediaQuery.removeEventListener("change", handleSystemChange);
+  }
+  if (typeof document !== "undefined") {
+    document.removeEventListener("click", handleThemeClickAway);
+    document.removeEventListener("keydown", handleThemeKeydown);
   }
 });
 
@@ -531,7 +580,7 @@ watch(
                 ? 'flex w-full items-center gap-3 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 transition hover:border-slate-400 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100'
                 : 'inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-800 transition hover:border-slate-400 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100',
             ]"
-            aria-label="Open general settings"
+            aria-label="Open settings"
             @click="openGeneralSettings"
           >
             <span aria-hidden="true" class="text-lg">⚙</span>
@@ -715,50 +764,80 @@ watch(
         >
           <div class="flex items-center justify-between border-b border-white/10 px-6 py-4">
             <div>
-              <h2 class="text-xl font-semibold text-white">General</h2>
-              <p class="text-sm text-slate-400">
-                Appearance and language preferences.
-              </p>
+              <h2 class="text-xl font-semibold text-white">Settings</h2>
             </div>
             <button
               type="button"
               class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 text-lg"
-              aria-label="Close general settings"
+              aria-label="Close settings"
               @click="closeGeneralSettings"
             >
               ✕
             </button>
           </div>
           <div class="space-y-5 overflow-y-auto p-6">
-            <div class="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <h3 class="text-sm font-semibold text-white">Appearance</h3>
-              <p class="text-xs text-slate-400">Choose your theme for this device.</p>
-              <div class="mt-4 grid gap-3 md:grid-cols-3">
-                <label
-                  class="flex cursor-pointer flex-col gap-1 rounded-2xl border border-white/15 bg-white/5 px-3 py-3 text-sm"
-                  :class="theme === 'system' ? 'ring-2 ring-white/40' : ''"
+            <div class="relative rounded-2xl border border-white/10 bg-white/5 p-5">
+              <div class="flex items-center justify-between gap-4">
+                <div class="min-w-0 space-y-1">
+                  <h3 class="text-sm font-semibold text-white">Appearance</h3>
+                  <p class="text-xs text-slate-400">Choose your theme for this device.</p>
+                  <p class="text-xs text-slate-500">Current: {{ themeSummary }}</p>
+                </div>
+                <button
+                  ref="themeButton"
+                  type="button"
+                  class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 text-lg text-slate-200 transition hover:border-white/40 hover:text-white"
+                  aria-label="Change theme"
+                  aria-haspopup="true"
+                  :aria-expanded="themeMenuOpen"
+                  @click.stop="toggleThemeMenu"
                 >
-                  <span class="text-xs font-semibold text-slate-300">System</span>
-                  <span class="text-[11px] text-slate-500">Match OS setting</span>
-                  <input class="sr-only" type="radio" value="system" v-model="theme" />
-                </label>
-                <label
-                  class="flex cursor-pointer flex-col gap-1 rounded-2xl border border-white/15 bg-white/5 px-3 py-3 text-sm"
-                  :class="theme === 'light' ? 'ring-2 ring-white/40' : ''"
-                >
-                  <span class="text-xs font-semibold text-slate-300">Light</span>
-                  <span class="text-[11px] text-slate-500">Bright surfaces</span>
-                  <input class="sr-only" type="radio" value="light" v-model="theme" />
-                </label>
-                <label
-                  class="flex cursor-pointer flex-col gap-1 rounded-2xl border border-white/15 bg-white/5 px-3 py-3 text-sm"
-                  :class="theme === 'dark' ? 'ring-2 ring-white/40' : ''"
-                >
-                  <span class="text-xs font-semibold text-slate-300">Dark</span>
-                  <span class="text-[11px] text-slate-500">Low-light friendly</span>
-                  <input class="sr-only" type="radio" value="dark" v-model="theme" />
-                </label>
+                  🌓
+                </button>
               </div>
+              <transition name="settings-overlay">
+                <div
+                  v-if="themeMenuOpen"
+                  ref="themeMenu"
+                  class="absolute right-0 top-full z-10 mt-3 w-64 rounded-2xl border border-white/15 bg-slate-900 p-3 text-slate-100 shadow-xl"
+                  @click.stop
+                >
+                  <p class="px-1 text-[11px] uppercase tracking-wide text-slate-500">
+                    Select theme
+                  </p>
+                  <ul class="mt-2 space-y-1">
+                    <li v-for="option in themeOptions" :key="option.id">
+                      <button
+                        type="button"
+                        class="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition"
+                        :class="
+                          theme === option.id
+                            ? 'bg-white/15 text-white'
+                            : 'text-slate-200 hover:bg-white/10'
+                        "
+                        @click="selectTheme(option.id)"
+                      >
+                        <div>
+                          <div class="font-semibold">{{ option.label }}</div>
+                          <p class="text-[11px] text-slate-400">
+                            {{ option.description }}
+                          </p>
+                        </div>
+                        <span
+                          class="ml-3 inline-flex h-5 w-5 items-center justify-center rounded-full border"
+                          :class="
+                            theme === option.id
+                              ? 'border-white bg-white text-slate-900'
+                              : 'border-white/30 text-transparent'
+                          "
+                        >
+                          •
+                        </span>
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+              </transition>
             </div>
           </div>
         </div>
