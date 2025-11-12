@@ -59,6 +59,11 @@ interface ChatState {
   mentorOverrideStatus: Record<string, MentorOverrideStatus>;
   mentorOverridesLoadedForUserId: string | null;
   chatModels: ChatModelOption[];
+  chatModelsLoading: boolean;
+  chatModelsLoaded: boolean;
+  chatModelsSaving: boolean;
+  chatModelsError: string | null;
+  chatModelsSyncedForUserId: string | null;
 }
 
 interface ChatHistoryRow {
@@ -109,6 +114,31 @@ interface MentorOverrideStatus {
   lastSyncedAt: string | null;
 }
 
+type ChatModelServerRow = {
+  id?: string;
+  model_id?: string;
+  label?: string;
+  position?: number | null;
+};
+
+interface ChatModelsResponse {
+  models: ChatModelServerRow[];
+}
+
+function normalizeChatModels(rows: ChatModelServerRow[]): ChatModelOption[] {
+  return rows
+    .map((row, index) => ({
+      id: row.id ?? row.model_id ?? "",
+      label: row.label ?? "",
+      position:
+        typeof row.position === "number" && Number.isFinite(row.position)
+          ? row.position
+          : index,
+    }))
+    .filter((row) => row.id && row.label)
+    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+}
+
 const defaultBaseUrl = import.meta.env.DEV
   ? "http://127.0.0.1:54321/functions/v1"
   : "";
@@ -123,6 +153,7 @@ const healthEndpoint = apiBaseUrl ? `${apiBaseUrl}/chat/health` : "/health";
 const mentorOverridesEndpoint = apiBaseUrl
   ? `${apiBaseUrl}/mentor-overrides`
   : "/mentor-overrides";
+const chatModelsEndpoint = apiBaseUrl ? `${apiBaseUrl}/chat-models` : "/chat-models";
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
 const MENTOR_OVERRIDES_STORAGE_KEY = "polychat.mentorOverrides";
 const CHAT_MODELS_STORAGE_KEY = "polychat.chatModels";
@@ -166,6 +197,11 @@ export const useChatStore = defineStore("chat", {
     mentorOverrideStatus: {},
     mentorOverridesLoadedForUserId: null,
     chatModels: [],
+    chatModelsLoading: false,
+    chatModelsLoaded: false,
+    chatModelsSaving: false,
+    chatModelsError: null,
+    chatModelsSyncedForUserId: null,
   }),
   getters: {
     orderedMessages: (state) =>
@@ -250,7 +286,14 @@ export const useChatStore = defineStore("chat", {
               typeof item.id === "string" &&
               typeof item.label === "string",
             )
-            .map((item) => ({ id: item.id, label: item.label }));
+            .map((item) => ({
+              id: item.id,
+              label: item.label,
+              position:
+                typeof (item as { position?: number }).position === "number"
+                  ? (item as { position?: number }).position
+                  : undefined,
+            }));
         }
       } catch (error) {
         console.warn("Failed to parse stored chat models", error);
@@ -266,47 +309,203 @@ export const useChatStore = defineStore("chat", {
         JSON.stringify(models),
       );
     },
-    ensureChatModelsLoaded() {
+    primeChatModels() {
       if (this.chatModels.length > 0) {
         return;
       }
+
       const stored = this.readStoredChatModels();
       const source = stored.length > 0 ? stored : CHAT_MODEL_OPTIONS;
-      this.chatModels = source.map((option) => ({ ...option }));
-      if (!this.chatModels.some((option) => option.id === this.selectedModel)) {
-        const fallback = this.chatModels[0]?.id ?? DEFAULT_CHAT_MODEL;
-        this.selectedModel = fallback;
+      this.chatModels = source.map((option, index) => ({
+        id: option.id,
+        label: option.label,
+        position:
+          typeof option.position === "number" ? option.position : index,
+      }));
+      this.chatModelsLoaded = true;
+      this.ensureSelectedModelIntegrity();
+    },
+    ensureSelectedModelIntegrity() {
+      if (this.chatModels.some((option) => option.id === this.selectedModel)) {
+        return;
+      }
+      const first = this.chatModels[0];
+      this.selectedModel = first ? first.id : DEFAULT_CHAT_MODEL;
+    },
+    async syncChatModelsWithServer(options?: { force?: boolean }) {
+      if (!this.userId) {
+        this.chatModelsSyncedForUserId = null;
+        this.chatModelsError = null;
+        this.chatModelsLoading = false;
+        this.primeChatModels();
+        return;
+      }
+
+      if (!options?.force && this.chatModelsSyncedForUserId === this.userId) {
+        return;
+      }
+
+      this.primeChatModels();
+      this.chatModelsLoading = true;
+      this.chatModelsError = null;
+
+      try {
+        const params = new URLSearchParams({ userId: this.userId });
+        const response = await fetch(
+          `${chatModelsEndpoint}?${params.toString()}`,
+          {
+            headers: buildFunctionHeaders(),
+          },
+        );
+
+        if (!response.ok) {
+          const message = await extractErrorMessage(
+            response,
+            "Unable to load chat models.",
+          );
+          throw new Error(message);
+        }
+
+        const data = (await response.json()) as ChatModelsResponse;
+        this.chatModels = normalizeChatModels(data.models);
+        this.writeStoredChatModels(this.chatModels);
+        this.chatModelsSyncedForUserId = this.userId;
+        this.chatModelsError = null;
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Unable to load chat models.";
+        this.chatModelsError = message;
+      } finally {
+        this.chatModelsLoading = false;
+        this.chatModelsLoaded = true;
+        this.ensureSelectedModelIntegrity();
       }
     },
-    addChatModel(option: ChatModelOption) {
-      this.ensureChatModelsLoaded();
+    async addChatModel(option: ChatModelOption) {
       const id = option.id.trim();
       const label = option.label.trim();
       if (!id || !label) {
         throw new Error("Model ID and label are required.");
       }
+
+      this.primeChatModels();
+
       if (this.chatModels.some((model) => model.id === id)) {
         throw new Error("That model is already in your list.");
       }
-      this.chatModels = [...this.chatModels, { id, label }];
-      this.writeStoredChatModels(this.chatModels);
-      this.setSelectedModel(id);
+
+      if (!this.userId) {
+        this.chatModels = [
+          ...this.chatModels,
+          { id, label, position: this.chatModels.length },
+        ];
+        this.writeStoredChatModels(this.chatModels);
+        this.setSelectedModel(id);
+        this.ensureSelectedModelIntegrity();
+        return;
+      }
+
+      const previous = [...this.chatModels];
+      const optimistic = [
+        ...previous,
+        { id, label, position: previous.length },
+      ];
+      this.chatModels = optimistic;
+      this.ensureSelectedModelIntegrity();
+      this.chatModelsSaving = true;
+
+      try {
+        const response = await fetch(chatModelsEndpoint, {
+          method: "POST",
+          headers: buildFunctionHeaders({ json: true }),
+          body: JSON.stringify({
+            userId: this.userId,
+            modelId: id,
+            label,
+          }),
+        });
+
+        if (!response.ok) {
+          const message = await extractErrorMessage(
+            response,
+            "Unable to add model.",
+          );
+          throw new Error(message);
+        }
+
+        const data = (await response.json()) as ChatModelsResponse;
+        this.chatModels = normalizeChatModels(data.models);
+        this.writeStoredChatModels(this.chatModels);
+        this.chatModelsSyncedForUserId = this.userId;
+        this.setSelectedModel(id);
+      } catch (error) {
+        this.chatModels = previous;
+        this.ensureSelectedModelIntegrity();
+        this.writeStoredChatModels(this.chatModels);
+        throw error;
+      } finally {
+        this.chatModelsSaving = false;
+      }
     },
-    removeChatModel(modelId: string) {
-      this.ensureChatModelsLoaded();
+    async removeChatModel(modelId: string) {
+      this.primeChatModels();
+      if (!modelId) return;
+
       if (this.chatModels.length <= 1) {
         throw new Error("At least one model must remain available.");
       }
-      const next = this.chatModels.filter((model) => model.id !== modelId);
-      if (next.length === this.chatModels.length) {
+
+      if (!this.userId) {
+        this.chatModels = this.chatModels.filter((model) => model.id !== modelId);
+        this.ensureSelectedModelIntegrity();
+        this.writeStoredChatModels(this.chatModels);
         return;
       }
-      this.chatModels = next;
-      if (!this.chatModels.some((model) => model.id === this.selectedModel)) {
-        const fallback = this.chatModels[0]?.id ?? DEFAULT_CHAT_MODEL;
-        this.selectedModel = fallback;
+
+      const previous = [...this.chatModels];
+      const next = previous.filter((model) => model.id !== modelId);
+      if (next.length === previous.length) {
+        return;
       }
-      this.writeStoredChatModels(this.chatModels);
+      if (next.length === 0) {
+        throw new Error("At least one model must remain available.");
+      }
+
+      this.chatModels = next;
+      this.ensureSelectedModelIntegrity();
+      this.chatModelsSaving = true;
+
+      try {
+        const response = await fetch(chatModelsEndpoint, {
+          method: "DELETE",
+          headers: buildFunctionHeaders({ json: true }),
+          body: JSON.stringify({
+            userId: this.userId,
+            modelId,
+          }),
+        });
+
+        if (!response.ok) {
+          const message = await extractErrorMessage(
+            response,
+            "Unable to remove model.",
+          );
+          throw new Error(message);
+        }
+
+        const data = (await response.json()) as ChatModelsResponse;
+        this.chatModels = normalizeChatModels(data.models);
+        this.writeStoredChatModels(this.chatModels);
+        this.chatModelsSyncedForUserId = this.userId;
+        this.ensureSelectedModelIntegrity();
+      } catch (error) {
+        this.chatModels = previous;
+        this.ensureSelectedModelIntegrity();
+        this.writeStoredChatModels(this.chatModels);
+        throw error;
+      } finally {
+        this.chatModelsSaving = false;
+      }
     },
     updateMentorSystemPrompt(mentorId: string, systemPrompt: string) {
       this.ensureMentorConfigsLoaded();
@@ -802,17 +1001,14 @@ export const useChatStore = defineStore("chat", {
       this.lockedMentorId = null;
     },
     setSelectedModel(model: string) {
-      this.ensureChatModelsLoaded();
+      this.primeChatModels();
       const next = this.chatModels.find((option) => option.id === model);
       if (next) {
         this.selectedModel = next.id;
         return;
       }
-      if (this.chatModels.length > 0) {
-        this.selectedModel = this.chatModels[0].id;
-      } else {
-        this.selectedModel = DEFAULT_CHAT_MODEL;
-      }
+      const first = this.chatModels[0];
+      this.selectedModel = first ? first.id : DEFAULT_CHAT_MODEL;
     },
     resetChat() {
       this.messages = [];
@@ -823,6 +1019,7 @@ export const useChatStore = defineStore("chat", {
     async initializeForUser(userId: string) {
       this.userId = userId;
       this.ensureMentorConfigsLoaded();
+      this.primeChatModels();
       await this.loadConversations();
       if (!this.sessionId && this.conversations.length) {
         const firstConversation = this.conversations[0];
@@ -834,6 +1031,7 @@ export const useChatStore = defineStore("chat", {
       }
       this.ensureServerMentorOverridesLoaded().catch(() => {});
       this.checkHealth().catch(() => {});
+      await this.syncChatModelsWithServer({ force: true });
     },
     handleUserSignedOut() {
       this.userId = null;
@@ -842,6 +1040,12 @@ export const useChatStore = defineStore("chat", {
       this.conversations = [];
       this.error = null;
       this.setMentor(DEFAULT_MENTOR_ID);
+      this.chatModels = [];
+      this.chatModelsSyncedForUserId = null;
+      this.chatModelsLoaded = false;
+      this.chatModelsError = null;
+      this.chatModelsSaving = false;
+      this.primeChatModels();
     },
     async deleteConversation(conversationId: string) {
       if (!conversationId) return;

@@ -9,7 +9,7 @@ import type { ChatFile } from "./stores/chat";
 const chatStore = useChatStore();
 const authStore = useAuthStore();
 
-chatStore.ensureChatModelsLoaded();
+chatStore.primeChatModels();
 
 // Removed unused MentorBadge import and mentors array
 
@@ -62,6 +62,9 @@ const isModelDialogOpen = ref(false);
 const modelForm = reactive({ id: "", label: "" });
 const modelFormError = ref<string | null>(null);
 const modelsError = ref<string | null>(null);
+const modelsLoading = computed(() => chatStore.chatModelsLoading);
+const modelsSaving = computed(() => chatStore.chatModelsSaving);
+const modelFetchError = computed(() => chatStore.chatModelsError);
 
 const selectedModel = computed(() =>
   modelOptions.value.find((model) => model.id === activeModelId.value) ?? null,
@@ -79,7 +82,7 @@ const closeModelDialog = () => {
   modelFormError.value = null;
 };
 
-const submitModelForm = () => {
+const submitModelForm = async () => {
   const trimmedId = modelForm.id.trim();
   const trimmedLabel = modelForm.label.trim();
   if (!trimmedId || !trimmedLabel) {
@@ -87,7 +90,7 @@ const submitModelForm = () => {
     return;
   }
   try {
-    chatStore.addChatModel({ id: trimmedId, label: trimmedLabel });
+    await chatStore.addChatModel({ id: trimmedId, label: trimmedLabel });
     modelsError.value = null;
     closeModelDialog();
   } catch (error) {
@@ -96,14 +99,14 @@ const submitModelForm = () => {
   }
 };
 
-const removeModel = (modelId: string) => {
+const removeModel = async (modelId: string) => {
   const confirmed =
     typeof window === "undefined"
       ? true
       : window.confirm("Remove this model from your list?");
   if (!confirmed) return;
   try {
-    chatStore.removeChatModel(modelId);
+    await chatStore.removeChatModel(modelId);
     modelsError.value = null;
   } catch (error) {
     modelsError.value =
@@ -831,6 +834,8 @@ watch(
                   <button
                     type="button"
                     class="rounded-full border border-white/20 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-white/40 hover:text-white"
+                    :disabled="modelsLoading || modelsSaving"
+                    :class="(modelsLoading || modelsSaving) ? 'cursor-not-allowed opacity-60' : ''"
                     @click="isModelDialogOpen ? closeModelDialog() : openModelDialog()"
                   >
                     {{ isModelDialogOpen ? "Close" : "Add" }}
@@ -839,17 +844,31 @@ watch(
                 <p class="text-xs text-slate-400">
                   Choose your active model and curate the list shown in chat.
                 </p>
+                <p
+                  v-if="modelsLoading"
+                  class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-400"
+                >
+                  Loading models…
+                </p>
                 <label class="text-xs font-medium uppercase tracking-wide text-slate-400">
                   Active model
                   <select
                     v-model="activeModelId"
-                    class="mt-2 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-sm text-slate-100 transition focus:border-white/40 focus:outline-none focus:ring-2 focus:ring-white/30"
+                    :disabled="modelsLoading"
+                    class="mt-2 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-sm text-slate-100 transition focus:border-white/40 focus:outline-none focus:ring-2 focus:ring-white/30 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <option v-for="option in modelOptions" :key="option.id" :value="option.id">
                       {{ option.label }}
                     </option>
                   </select>
                 </label>
+                <p
+                  v-if="modelFetchError && !modelsLoading"
+                  class="rounded-xl border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200"
+                  role="status"
+                >
+                  {{ modelFetchError }}
+                </p>
                 <p
                   v-if="modelsError"
                   class="rounded-xl border border-rose-400/50 bg-rose-500/10 px-3 py-2 text-xs text-rose-200"
@@ -869,6 +888,8 @@ watch(
                     <button
                       type="button"
                       class="inline-flex items-center gap-1 rounded-full border border-white/20 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-rose-300 hover:text-rose-200"
+                      :disabled="modelsSaving"
+                      :class="modelsSaving ? 'cursor-not-allowed opacity-60' : ''"
                       @click="removeModel(selectedModel.id)"
                     >
                       Remove
@@ -956,8 +977,12 @@ watch(
               <button
                 type="submit"
                 class="rounded-full border border-white/15 px-3 py-1 font-semibold text-slate-900 transition"
-                :class="modelForm.id && modelForm.label ? 'bg-white hover:bg-white/90' : 'bg-white/40 text-slate-500'"
-                :disabled="!modelForm.id || !modelForm.label"
+                :class="
+                  modelForm.id && modelForm.label && !modelsSaving
+                    ? 'bg-white hover:bg-white/90'
+                    : 'bg-white/40 text-slate-500'
+                "
+                :disabled="!modelForm.id || !modelForm.label || modelsSaving"
               >
                 Save
               </button>

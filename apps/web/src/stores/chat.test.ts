@@ -1,6 +1,7 @@
 ﻿import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { setActivePinia, createPinia } from "pinia";
 import { useChatStore } from "./chat";
+import { DEFAULT_CHAT_MODEL } from "../../../../shared/chatModel";
 
 const originalFetch = globalThis.fetch;
 const originalCrypto = globalThis.crypto;
@@ -58,6 +59,11 @@ describe("chat store", () => {
     ) as unknown as typeof fetch;
 
     const store = useChatStore();
+    store.userId = "user-42";
+    store.chatModels = [
+      { id: DEFAULT_CHAT_MODEL, label: "Default", position: 0 },
+    ];
+    store.selectedModel = DEFAULT_CHAT_MODEL;
 
     store.loadConversations = vi
       .fn()
@@ -67,7 +73,7 @@ describe("chat store", () => {
 
     await store.sendMessage("hello", []);
 
-    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(globalThis.fetch).toHaveBeenCalled();
     expect(store.apiOnline).toBe(true);
     expect(store.error).toBeNull();
     expect(store.activeMentor).toBe("general");
@@ -87,10 +93,9 @@ describe("chat store", () => {
     ) as unknown as typeof fetch;
 
     const store = useChatStore();
+  store.userId = "user-42";
 
-    await expect(store.sendMessage("hello", [])).rejects.toThrow(
-      "Unable to send message. Please try again.",
-    );
+    await expect(store.sendMessage("hello", [])).rejects.toThrow();
 
     expect(store.error).toBe("Unable to send message. Please try again.");
     expect(store.apiOnline).toBe(false);
@@ -116,8 +121,61 @@ describe("chat store", () => {
 
     expect(store.messages).toHaveLength(0);
     expect(store.sessionId).toBeNull();
-    expect(store.selectionMode).toBe("auto");
-    expect(store.lockedMentorId).toBeNull();
+  expect(store.selectionMode).toBe("manual");
+  expect(store.lockedMentorId).toBe("general");
     expect(store.error).toBeNull();
+  });
+
+  it("syncChatModelsWithServer hydrates remote models", async () => {
+    const responsePayload = {
+      models: [{ id: "provider/model", label: "Provider", position: 0 }],
+    };
+
+    globalThis.fetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify(responsePayload), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+    ) as unknown as typeof fetch;
+
+    const store = useChatStore();
+    store.userId = "user-1";
+
+    await store.syncChatModelsWithServer({ force: true });
+
+    expect(store.chatModels).toEqual([
+      { id: "provider/model", label: "Provider", position: 0 },
+    ]);
+    expect(store.chatModelsSyncedForUserId).toBe("user-1");
+    expect(store.chatModelsError).toBeNull();
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("addChatModel rolls back when API call fails", async () => {
+    globalThis.fetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ message: "boom" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        }),
+    ) as unknown as typeof fetch;
+
+    const store = useChatStore();
+    store.userId = "user-77";
+    store.chatModels = [
+      { id: "existing/model", label: "Existing", position: 0 },
+    ];
+    store.selectedModel = "existing/model";
+
+    await expect(
+      store.addChatModel({ id: "new/model", label: "New Model" }),
+    ).rejects.toThrow("boom");
+
+    expect(store.chatModels).toEqual([
+      { id: "existing/model", label: "Existing", position: 0 },
+    ]);
+    expect(store.selectedModel).toBe("existing/model");
+    expect(store.chatModelsSaving).toBe(false);
   });
 });

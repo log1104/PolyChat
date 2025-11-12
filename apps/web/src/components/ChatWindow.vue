@@ -82,7 +82,7 @@ const draft = computed({
 
 const chatStore = useChatStore();
 
-chatStore.ensureChatModelsLoaded();
+chatStore.primeChatModels();
 
 const selectedModel = computed({
   get: () => chatStore.selectedModel,
