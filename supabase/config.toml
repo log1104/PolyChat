@@ -278,6 +278,15 @@ skip_nonce_check = false
 # If enabled, it will allow the user to successfully authenticate when the provider does not return an email address.
 email_optional = false
 
+[auth.external.google]
+enabled = true
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+redirect_uri = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_REDIRECT_URI)"
+url = ""
+skip_nonce_check = true
+email_optional = false
+
 # Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS, EIP-4361) standard.
 # You can configure "web3" rate limit in the [auth.rate_limit] section and set up [auth.captcha] if self-hosting.
 [auth.web3.solana]
@@ -326,8 +335,13 @@ inspector_port = 8083
 # The Deno major version to use.
 deno_version = 2
 
-# [edge_runtime.secrets]
-# secret_key = "env(SECRET_VALUE)"
+[edge_runtime.secrets]
+OPENROUTER_API_KEY = "env(OPENROUTER_API_KEY)"
+OPENAI_API_KEY = "env(OPENAI_API_KEY)"
+CHAT_LLM_TIMEOUT_MS = "env(CHAT_LLM_TIMEOUT_MS)"
+CHAT_LLM_MAX_TOKENS = "env(CHAT_LLM_MAX_TOKENS)"
+CHAT_RATE_LIMIT_WINDOW_SECONDS = "env(CHAT_RATE_LIMIT_WINDOW_SECONDS)"
+CHAT_RATE_LIMIT_MAX_REQUESTS = "env(CHAT_RATE_LIMIT_MAX_REQUESTS)"
 
 [analytics]
 enabled = true

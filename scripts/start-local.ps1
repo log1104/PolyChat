@@ -104,6 +104,11 @@ Import-DotEnv -Path $envFile
 $apiEnvFile = Join-Path $repoRoot "apps/api/.env"
 Import-DotEnv -Path $apiEnvFile
 
+# Supabase Edge Functions read secrets out of the process env. Load supabase/.env so OPENROUTER/OpenAI keys
+# are available before we run `supabase start` or `supabase functions serve`.
+$supabaseEnvFile = Join-Path $repoRoot "supabase/.env"
+Import-DotEnv -Path $supabaseEnvFile
+
 if (-not $env:OPENROUTER_API_KEY -and -not $env:OPENAI_API_KEY) {
     Write-Warn "OPENROUTER_API_KEY or OPENAI_API_KEY is not set. The chat function will return 500 responses."
 }

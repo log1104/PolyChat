@@ -100,6 +100,17 @@ Environment variables are split per-package for better isolation in the monorepo
 - Enable Google in Supabase Dashboard → Authentication → Providers. Configure both production and `http://127.0.0.1:54321/auth/v1/callback` redirect URLs.
 - Grab Google OAuth client ID/secret from Google Cloud Console and paste into Supabase.
 - No extra frontend env vars are needed beyond `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY`, but make sure Vercel and GitHub secrets use the same values.
+- **Local CLI stack:** add the Google settings to `supabase/.env` (both `SUPABASE_AUTH_EXTERNAL_GOOGLE_*` and `GOTRUE_EXTERNAL_GOOGLE_*`) **and** add this block to `supabase/config.toml` so GoTrue knows the provider is enabled:
+  ```toml
+  [auth.external.google]
+  enabled = true
+  client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+  secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+  redirect_uri = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_REDIRECT_URI)"
+  skip_nonce_check = true
+  email_optional = false
+  ```
+  Restart the helper script so the containers reload the config. Also whitelist every local origin you use (`http://127.0.0.1:5173`, `http://localhost:5173`, …) under Authentication → Redirect URLs, otherwise Supabase will 400 the `redirect_to` parameter.
 - After changing OAuth settings, redeploy Supabase edge functions (`supabase functions deploy chat mentor-overrides conversations`) so the latest code runs with verified JWTs.
 
 Never commit `.env*` files. In Vercel, configure vars via Project Settings.

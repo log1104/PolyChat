@@ -418,14 +418,6 @@ watch(
           >
             <span aria-hidden="true" class="text-lg">☰</span>
           </button>
-          <button
-            type="button"
-            class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-800 transition hover:border-slate-400 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            aria-label="Open general settings"
-            @click="openGeneralSettings"
-          >
-            <span aria-hidden="true" class="text-lg">⚙</span>
-          </button>
         </header>
 
         <div
@@ -531,11 +523,26 @@ watch(
           </ul>
         </section>
 
-        <div
-          v-if="isSidebarExpanded"
-          class="mt-auto text-[11px] text-slate-500 dark:text-slate-500"
-        >
-          v0.1
+        <div class="mt-auto flex w-full flex-col items-center gap-3">
+          <button
+            type="button"
+            :class="[
+              isSidebarExpanded
+                ? 'flex w-full items-center gap-3 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 transition hover:border-slate-400 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100'
+                : 'inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-800 transition hover:border-slate-400 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100',
+            ]"
+            aria-label="Open general settings"
+            @click="openGeneralSettings"
+          >
+            <span aria-hidden="true" class="text-lg">⚙</span>
+            <span v-if="isSidebarExpanded">Settings</span>
+          </button>
+          <div
+            v-if="isSidebarExpanded"
+            class="text-[11px] text-slate-500 dark:text-slate-500"
+          >
+            v0.1
+          </div>
         </div>
       </div>
     </aside>
