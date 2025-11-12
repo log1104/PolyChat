@@ -1,7 +1,8 @@
 param(
     [switch]$WithFrontend,
     [switch]$SkipSupabaseStart,
-    [switch]$ResetSupabaseContainers
+    [switch]$ResetSupabaseContainers,
+    [switch]$SkipDbPush
 )
 
 $ErrorActionPreference = "Stop"
@@ -148,6 +149,20 @@ if (-not $SkipSupabaseStart) {
     Write-Warn "Skipping Supabase start (per -SkipSupabaseStart)"
 }
 
+if (-not $SkipDbPush) {
+    Write-Step "Applying pending Supabase migrations (supabase db push)"
+    try {
+        supabase db push
+        if ($LASTEXITCODE -ne 0) {
+            throw "supabase db push failed with exit code $LASTEXITCODE"
+        }
+    } catch {
+        throw "Unable to apply database migrations: $($_.Exception.Message)"
+    }
+} else {
+    Write-Warn "Skipping Supabase db push (per -SkipDbPush)"
+}
+
 Write-Step "Launching Edge Function: chat"
 $functionCommand = "cd `"$repoRoot`"; supabase functions serve chat --no-verify-jwt --watch --env-file `"$envFile`""
 Start-Process $shellPath -ArgumentList "-NoExit", "-Command", $functionCommand | Out-Null
@@ -155,6 +170,10 @@ Start-Process $shellPath -ArgumentList "-NoExit", "-Command", $functionCommand |
 Write-Step "Launching Edge Function: mentor-overrides"
 $mentorOverridesCommand = "cd `"$repoRoot`"; supabase functions serve mentor-overrides --no-verify-jwt --watch --env-file `"$envFile`""
 Start-Process $shellPath -ArgumentList "-NoExit", "-Command", $mentorOverridesCommand | Out-Null
+
+Write-Step "Launching Edge Function: chat-models"
+$chatModelsCommand = "cd `"$repoRoot`"; supabase functions serve chat-models --no-verify-jwt --watch --env-file `"$envFile`""
+Start-Process $shellPath -ArgumentList "-NoExit", "-Command", $chatModelsCommand | Out-Null
 
 if ($WithFrontend) {
     Write-Step "Launching frontend dev server on http://127.0.0.1:5173/"

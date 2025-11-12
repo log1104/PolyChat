@@ -4,7 +4,7 @@ import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 import {
   DEFAULT_CHAT_MODEL_CATALOG,
   type ChatModelCatalogEntry,
-} from "../../../shared/chatModelCatalog.ts";
+} from "../../../shared/chatModel.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",

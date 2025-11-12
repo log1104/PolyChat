@@ -17,6 +17,11 @@ import {
   publishMentor,
   upsertDraft,
 } from "./services/mentorConfigService";
+import {
+  addUserChatModel,
+  listUserChatModels,
+  removeUserChatModel,
+} from "./services/chatModelService";
 import { mentorConfigCoreSchema } from "./schema/mentorConfigSchema";
 
 // Load env from multiple likely locations to support monorepo runs
@@ -72,6 +77,19 @@ const messagesQuerySchema = z.object({
   before: z.string().datetime().optional(),
 });
 
+const chatModelsQuerySchema = z.object({
+  userId: z.string().uuid(),
+});
+
+const createChatModelSchema = chatModelsQuerySchema.extend({
+  modelId: z.string().trim().min(1, "Model ID is required"),
+  label: z.string().trim().min(1, "Label is required"),
+});
+
+const deleteChatModelSchema = chatModelsQuerySchema.extend({
+  modelId: z.string().trim().min(1, "Model ID is required"),
+});
+
 // Mentor Config schemas
 const mentorDraftSchema = z.object({
   id: z.string(),
@@ -84,6 +102,67 @@ const mentorDraftSchema = z.object({
 
 app.get("/health", (_req: Request, res: Response) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+app.get("/api/chat-models", async (req: Request, res: Response) => {
+  const parsed = chatModelsQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: true,
+      message: "Invalid query parameters",
+      details: parsed.error.flatten(),
+    });
+  }
+  try {
+    const models = await listUserChatModels(parsed.data.userId);
+    res.json({ models });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: true, message });
+  }
+});
+
+app.post("/api/chat-models", async (req: Request, res: Response) => {
+  const parsed = createChatModelSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: true,
+      message: "Invalid request payload",
+      details: parsed.error.flatten(),
+    });
+  }
+  try {
+    const models = await addUserChatModel(
+      parsed.data.userId,
+      parsed.data.modelId,
+      parsed.data.label,
+    );
+    res.status(201).json({ models });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: true, message });
+  }
+});
+
+app.delete("/api/chat-models", async (req: Request, res: Response) => {
+  const parsed = deleteChatModelSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: true,
+      message: "Invalid request payload",
+      details: parsed.error.flatten(),
+    });
+  }
+  try {
+    const models = await removeUserChatModel(
+      parsed.data.userId,
+      parsed.data.modelId,
+    );
+    res.json({ models });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: true, message });
+  }
 });
 
 // Mentor Config Endpoints (Stage 2 minimal)

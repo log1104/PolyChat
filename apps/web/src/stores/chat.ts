@@ -309,6 +309,17 @@ export const useChatStore = defineStore("chat", {
         JSON.stringify(models),
       );
     },
+    ensureChatModelsLoaded() {
+      if (this.chatModelsLoaded || this.chatModelsLoading) {
+        return;
+      }
+      this.primeChatModels();
+      if (!this.userId) {
+        this.chatModelsLoaded = true;
+        return;
+      }
+      this.syncChatModelsWithServer().catch(() => {});
+    },
     primeChatModels() {
       if (this.chatModels.length > 0) {
         return;

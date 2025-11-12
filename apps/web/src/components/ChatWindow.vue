@@ -30,11 +30,16 @@
       </div>
     </header>
 
-    <div class="min-h-0 flex-1 overflow-hidden">
+    <div
+      :class="[
+        'overflow-hidden',
+        hasMessages ? 'min-h-0 flex-1' : 'mt-4',
+      ]"
+    >
       <MessageList
         :messages="messages"
         :active-mentor="activeMentor"
-        class="h-full"
+        :class="hasMessages ? 'h-full' : ''"
       />
     </div>
 
@@ -90,5 +95,6 @@ const selectedModel = computed({
 });
 
 const modelOptions = computed(() => chatStore.chatModels);
+const hasMessages = computed(() => props.messages.length > 0);
 </script>
 

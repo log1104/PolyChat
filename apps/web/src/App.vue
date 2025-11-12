@@ -855,7 +855,7 @@ watch(
                   <select
                     v-model="activeModelId"
                     :disabled="modelsLoading"
-                    class="mt-2 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-sm text-slate-100 transition focus:border-white/40 focus:outline-none focus:ring-2 focus:ring-white/30 disabled:cursor-not-allowed disabled:opacity-60"
+                    class="model-select mt-2 w-full rounded-xl border border-white/15 bg-white px-3 py-2 text-sm text-slate-900 transition focus:border-white/40 focus:outline-none focus:ring-2 focus:ring-white/30 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-slate-900/60 dark:text-slate-100"
                   >
                     <option v-for="option in modelOptions" :key="option.id" :value="option.id">
                       {{ option.label }}
@@ -1048,5 +1048,15 @@ watch(
 .model-dialog-enter-from,
 .model-dialog-leave-to {
   opacity: 0;
+}
+
+.model-select option {
+  color: #0f172a;
+  background-color: #ffffff;
+}
+
+.dark .model-select option {
+  color: #f8fafc;
+  background-color: #0f172a;
 }
 </style>
