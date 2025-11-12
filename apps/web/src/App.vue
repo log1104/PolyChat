@@ -760,18 +760,6 @@ watch(
                 </label>
               </div>
             </div>
-            <div class="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <h3 class="text-sm font-semibold text-white">Language</h3>
-              <p class="text-xs text-slate-400">
-                Auto-detect for now. Manual selection coming soon.
-              </p>
-            </div>
-            <div class="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <h3 class="text-sm font-semibold text-white">Data controls</h3>
-              <p class="text-xs text-slate-400">
-                Coming soon: manage retention, exports, linked accounts.
-              </p>
-            </div>
           </div>
         </div>
       </div>
