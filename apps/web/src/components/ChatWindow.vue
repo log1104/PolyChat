@@ -12,8 +12,8 @@
         >
           <option
             v-for="option in modelOptions"
-            :key="option.value"
-            :value="option.value"
+            :key="option.id"
+            :value="option.id"
           >
             {{ option.label }}
           </option>
@@ -58,7 +58,6 @@
 import { computed } from "vue";
 import type { ChatMessage, ChatFile } from "../stores/chat";
 import { useChatStore } from "../stores/chat";
-import { CHAT_MODEL_OPTIONS } from "../lib/chatModels";
 import MessageList from "./MessageList.vue";
 import MessageInput from "./MessageInput.vue";
 
@@ -83,11 +82,13 @@ const draft = computed({
 
 const chatStore = useChatStore();
 
+chatStore.ensureChatModelsLoaded();
+
 const selectedModel = computed({
   get: () => chatStore.selectedModel,
   set: (value: string) => chatStore.setSelectedModel(value),
 });
 
-const modelOptions = CHAT_MODEL_OPTIONS;
+const modelOptions = computed(() => chatStore.chatModels);
 </script>
 

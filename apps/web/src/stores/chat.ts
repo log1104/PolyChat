@@ -5,6 +5,10 @@ import {
   hasMentor,
   type MentorConfig,
 } from "../lib/mentorConfigs";
+import {
+  CHAT_MODEL_OPTIONS,
+  type ChatModelOption,
+} from "../lib/chatModels";
 import { DEFAULT_CHAT_MODEL } from "../../../../shared/chatModel";
 import { useAuthStore } from "./auth";
 
@@ -54,6 +58,7 @@ interface ChatState {
   mentorConfigs: Record<string, MentorConfig>;
   mentorOverrideStatus: Record<string, MentorOverrideStatus>;
   mentorOverridesLoadedForUserId: string | null;
+  chatModels: ChatModelOption[];
 }
 
 interface ChatHistoryRow {
@@ -120,6 +125,7 @@ const mentorOverridesEndpoint = apiBaseUrl
   : "/mentor-overrides";
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
 const MENTOR_OVERRIDES_STORAGE_KEY = "polychat.mentorOverrides";
+const CHAT_MODELS_STORAGE_KEY = "polychat.chatModels";
 const DEFAULT_MENTOR_ID = "general";
 
 function buildFunctionHeaders(options?: { json?: boolean }) {
@@ -159,6 +165,7 @@ export const useChatStore = defineStore("chat", {
     mentorConfigs: {},
     mentorOverrideStatus: {},
     mentorOverridesLoadedForUserId: null,
+    chatModels: [],
   }),
   getters: {
     orderedMessages: (state) =>
@@ -226,6 +233,80 @@ export const useChatStore = defineStore("chat", {
         MENTOR_OVERRIDES_STORAGE_KEY,
         JSON.stringify(overrides),
       );
+    },
+    readStoredChatModels(): ChatModelOption[] {
+      if (typeof window === "undefined") {
+        return [];
+      }
+      try {
+        const raw = window.localStorage.getItem(CHAT_MODELS_STORAGE_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed
+            .filter((item): item is ChatModelOption =>
+              typeof item === "object" &&
+              item !== null &&
+              typeof item.id === "string" &&
+              typeof item.label === "string",
+            )
+            .map((item) => ({ id: item.id, label: item.label }));
+        }
+      } catch (error) {
+        console.warn("Failed to parse stored chat models", error);
+      }
+      return [];
+    },
+    writeStoredChatModels(models: ChatModelOption[]) {
+      if (typeof window === "undefined") {
+        return;
+      }
+      window.localStorage.setItem(
+        CHAT_MODELS_STORAGE_KEY,
+        JSON.stringify(models),
+      );
+    },
+    ensureChatModelsLoaded() {
+      if (this.chatModels.length > 0) {
+        return;
+      }
+      const stored = this.readStoredChatModels();
+      const source = stored.length > 0 ? stored : CHAT_MODEL_OPTIONS;
+      this.chatModels = source.map((option) => ({ ...option }));
+      if (!this.chatModels.some((option) => option.id === this.selectedModel)) {
+        const fallback = this.chatModels[0]?.id ?? DEFAULT_CHAT_MODEL;
+        this.selectedModel = fallback;
+      }
+    },
+    addChatModel(option: ChatModelOption) {
+      this.ensureChatModelsLoaded();
+      const id = option.id.trim();
+      const label = option.label.trim();
+      if (!id || !label) {
+        throw new Error("Model ID and label are required.");
+      }
+      if (this.chatModels.some((model) => model.id === id)) {
+        throw new Error("That model is already in your list.");
+      }
+      this.chatModels = [...this.chatModels, { id, label }];
+      this.writeStoredChatModels(this.chatModels);
+      this.setSelectedModel(id);
+    },
+    removeChatModel(modelId: string) {
+      this.ensureChatModelsLoaded();
+      if (this.chatModels.length <= 1) {
+        throw new Error("At least one model must remain available.");
+      }
+      const next = this.chatModels.filter((model) => model.id !== modelId);
+      if (next.length === this.chatModels.length) {
+        return;
+      }
+      this.chatModels = next;
+      if (!this.chatModels.some((model) => model.id === this.selectedModel)) {
+        const fallback = this.chatModels[0]?.id ?? DEFAULT_CHAT_MODEL;
+        this.selectedModel = fallback;
+      }
+      this.writeStoredChatModels(this.chatModels);
     },
     updateMentorSystemPrompt(mentorId: string, systemPrompt: string) {
       this.ensureMentorConfigsLoaded();
@@ -721,7 +802,17 @@ export const useChatStore = defineStore("chat", {
       this.lockedMentorId = null;
     },
     setSelectedModel(model: string) {
-      this.selectedModel = model;
+      this.ensureChatModelsLoaded();
+      const next = this.chatModels.find((option) => option.id === model);
+      if (next) {
+        this.selectedModel = next.id;
+        return;
+      }
+      if (this.chatModels.length > 0) {
+        this.selectedModel = this.chatModels[0].id;
+      } else {
+        this.selectedModel = DEFAULT_CHAT_MODEL;
+      }
     },
     resetChat() {
       this.messages = [];
